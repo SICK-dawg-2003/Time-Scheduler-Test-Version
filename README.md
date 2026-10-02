@@ -1,4 +1,4 @@
-# Time Scheduling App (UniSync) 📅📱
+# Time Scheduling App (UniSync)
 
 An interactive, color-coded Time Management and Daily Scheduler Android application built with **Jetpack Compose**, supporting **drag-and-drop scheduling**, **conflict discrepancy auto-resolution**, **Google & Outlook Calendar sync configuration**, **Profile Settings**, and **Camera OCR Schedule Scanning** powered by **CameraX** & **ML Kit Text Recognition**.
 
