@@ -1,10 +1,10 @@
 # Time Scheduling App (UniSync)
 
-An interactive, color-coded Time Management and Daily Scheduler Android application built with **Jetpack Compose**, supporting **drag-and-drop scheduling**, **conflict discrepancy auto-resolution**, and **Camera OCR Schedule Scanning** powered by **CameraX** & **ML Kit Text Recognition**.
+An interactive, color-coded Time Management and Daily Scheduler Android application, supporting **drag-and-drop scheduling**, **conflict discrepancy function**, and **Camera OCR Schedule Scanning (not yet implemented)**.
 
 ---
 
-## Key Features
+## Key Features / Implementations
 
 - **Color-Coded Calendar & Daily Timeline**:
   - Color-coded categories: **Work** (Blue), **Personal** (Green), **Health** (Pink), **Study** (Purple), **Urgent** (Orange), and **Other** (Teal).
@@ -25,7 +25,7 @@ An interactive, color-coded Time Management and Daily Scheduler Android applicat
 
 ---
 
-## Tech Stack & Libraries
+## Libraries
 
 - **Language**: Kotlin
 - **UI Framework**: Jetpack Compose (Material3)
@@ -55,6 +55,3 @@ An interactive, color-coded Time Management and Daily Scheduler Android applicat
 
 ---
 
-## License
-
-Distributed under the MIT License.
