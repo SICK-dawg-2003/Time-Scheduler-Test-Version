@@ -1,6 +1,6 @@
 # Time Scheduling App (UniSync)
 
-An interactive, color-coded Time Management and Daily Scheduler Android application built with **Jetpack Compose**, supporting **drag-and-drop scheduling**, **conflict discrepancy auto-resolution**, **Google & Outlook Calendar sync configuration**, **Profile Settings**, and **Camera OCR Schedule Scanning** powered by **CameraX** & **ML Kit Text Recognition**.
+An interactive, color-coded Time Management and Daily Scheduler Android application built with **Jetpack Compose**, supporting **drag-and-drop scheduling**, **conflict discrepancy auto-resolution**, and **Camera OCR Schedule Scanning** powered by **CameraX** & **ML Kit Text Recognition**.
 
 ---
 
@@ -15,19 +15,13 @@ An interactive, color-coded Time Management and Daily Scheduler Android applicat
 - **Schedule Discrepancy & Conflict Resolver**:
   - Automatically detects overlapping task time slots.
   - Warning banner with **Auto-Resolve** button to recalculate time buffers and shift subsequent tasks forward.
-- **Profile & Settings**:
-  - **Account**: User profile name, avatar, email, and subscription tier.
-  - **Activity Progress**: Daily completion progress bar, task metrics, streak count, and productivity hours.
-  - **Notifications**: Reminders toggle, notification sound, quiet hours, and lead time settings.
-  - **Google Calendar & Outlook Sync**: Account connections, auto-sync toggles, manual sync triggers, and live sync status indicators.
-  - **About**: App version `1.0.0 (Build 102)` and app feature overview.
 - **Camera OCR Schedule Scanner**:
   - CameraX live preview with scanning reticle overlay.
   - ML Kit Text Recognition pipeline extracting time slots and titles from photos, flyers, or timetables.
   - Batch import candidate tasks directly into the calendar.
 - **Responsive Layout for Phones & Tablets**:
   - Bottom Navigation Bar on compact phone screens.
-  - Side Navigation Rail with optional side-by-side split view on tablet/foldable screens.
+  - Side Navigation Rail on tablet/foldable screens.
 
 ---
 

@@ -1,8 +1,8 @@
 package com.example.time_scheduler.ui
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import com.example.time_scheduler.data.Category
-import com.example.time_scheduler.data.ProfileState
 import com.example.time_scheduler.data.TaskItem
 import com.example.time_scheduler.domain.ScheduleConflict
 import com.example.time_scheduler.domain.ScheduleTextParser
@@ -13,16 +13,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.time.LocalDate
 import java.time.LocalTime
 
-class ScheduleViewModel(
-    private val repository: ScheduleRepository = ScheduleRepository()
-) : ViewModel() {
+class ScheduleViewModel @JvmOverloads constructor(
+    application: Application,
+    private val repository: ScheduleRepository = ScheduleRepository(application)
+) : AndroidViewModel(application) {
 
     private val textParser = ScheduleTextParser()
 
     val selectedDate: StateFlow<LocalDate> = repository.selectedDate
     val allTasks: StateFlow<List<TaskItem>> = repository.tasks
     val conflicts: StateFlow<List<ScheduleConflict>> = repository.conflicts
-    val profileState: StateFlow<ProfileState> = repository.profileState
     val selectedCategoryFilter: StateFlow<Category?> = repository.selectedCategoryFilter
 
     private val _scannedCandidateTasks = MutableStateFlow<List<TaskItem>>(emptyList())
@@ -73,25 +73,5 @@ class ScheduleViewModel(
 
     fun clearScannedCandidates() {
         _scannedCandidateTasks.value = emptyList()
-    }
-
-    fun updateNotificationsSettings(enabled: Boolean, sound: Boolean, quietHours: Boolean, leadTimeMinutes: Int) {
-        repository.updateNotificationsSettings(enabled, sound, quietHours, leadTimeMinutes)
-    }
-
-    fun toggleGoogleSync(enabled: Boolean) {
-        repository.toggleGoogleSync(enabled)
-    }
-
-    fun toggleOutlookSync(enabled: Boolean) {
-        repository.toggleOutlookSync(enabled)
-    }
-
-    fun triggerGoogleSyncNow() {
-        repository.triggerGoogleCalendarSync()
-    }
-
-    fun triggerOutlookSyncNow() {
-        repository.triggerOutlookCalendarSync()
     }
 }

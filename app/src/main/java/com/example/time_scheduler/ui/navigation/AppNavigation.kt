@@ -7,9 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.Icon
@@ -32,7 +30,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.time_scheduler.ui.ScheduleViewModel
 import com.example.time_scheduler.ui.calendar.CalendarScreen
 import com.example.time_scheduler.ui.camera.CameraScanScreen
-import com.example.time_scheduler.ui.profile.ProfileScreen
 
 enum class AppDestination(
     val route: String,
@@ -40,8 +37,7 @@ enum class AppDestination(
     val icon: ImageVector
 ) {
     CALENDAR("calendar", "Calendar", Icons.Default.CalendarMonth),
-    SCANNER("scanner", "Scanner", Icons.Default.CameraAlt),
-    PROFILE("profile", "Profile", Icons.Default.AccountCircle)
+    SCANNER("scanner", "Scanner", Icons.Default.CameraAlt)
 }
 
 @Composable
@@ -78,34 +74,15 @@ fun MainAppNavigation(
                     Spacer(modifier = Modifier.weight(1f))
                 }
 
-                // Main Content View (supports side-by-side multi-pane on large tablet screens)
+                // Main Content View
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
                 ) {
                     when (currentDestination) {
-                        AppDestination.CALENDAR -> {
-                            if (this@BoxWithConstraints.maxWidth > 900.dp) {
-                                // Split Pane for wide tablets: Calendar on Left, Profile/Sync on Right
-                                Row(modifier = Modifier.fillMaxSize()) {
-                                    Box(modifier = Modifier.weight(1.2f)) {
-                                        CalendarScreen(viewModel = viewModel)
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .width(360.dp)
-                                            .fillMaxHeight()
-                                    ) {
-                                        ProfileScreen(viewModel = viewModel)
-                                    }
-                                }
-                            } else {
-                                CalendarScreen(viewModel = viewModel)
-                            }
-                        }
+                        AppDestination.CALENDAR -> CalendarScreen(viewModel = viewModel)
                         AppDestination.SCANNER -> CameraScanScreen(viewModel = viewModel)
-                        AppDestination.PROFILE -> ProfileScreen(viewModel = viewModel)
                     }
                 }
             }
@@ -140,7 +117,6 @@ fun MainAppNavigation(
                     when (currentDestination) {
                         AppDestination.CALENDAR -> CalendarScreen(viewModel = viewModel)
                         AppDestination.SCANNER -> CameraScanScreen(viewModel = viewModel)
-                        AppDestination.PROFILE -> ProfileScreen(viewModel = viewModel)
                     }
                 }
             }
