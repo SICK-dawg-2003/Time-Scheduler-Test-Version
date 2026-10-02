@@ -4,13 +4,13 @@ An interactive, color-coded Time Management and Daily Scheduler Android applicat
 
 ---
 
-## 🌟 Key Features
+## Key Features
 
-- **Interactive Color-Coded Calendar & Daily Timeline**:
+- **Color-Coded Calendar & Daily Timeline**:
   - Color-coded categories: **Work** (Blue), **Personal** (Green), **Health** (Pink), **Study** (Purple), **Urgent** (Orange), and **Other** (Teal).
   - 24-hour hour grid timeline with formatted time strings, completion state, and sync badges.
   - Date strip week selector and category filter pills.
-- **Drag-and-Drop Scheduling**:
+- **Drag-and-Drop Schedule**:
   - Long-press and drag task cards vertically along time slots to reschedule start times dynamically.
 - **Schedule Discrepancy & Conflict Resolver**:
   - Automatically detects overlapping task time slots.
@@ -31,7 +31,7 @@ An interactive, color-coded Time Management and Daily Scheduler Android applicat
 
 ---
 
-## 🛠 Tech Stack & Libraries
+## Tech Stack & Libraries
 
 - **Language**: Kotlin
 - **UI Framework**: Jetpack Compose (Material3)
@@ -46,7 +46,7 @@ An interactive, color-coded Time Management and Daily Scheduler Android applicat
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 1. **Clone the Repository**:
    ```bash
@@ -61,6 +61,6 @@ An interactive, color-coded Time Management and Daily Scheduler Android applicat
 
 ---
 
-## 📄 License
+## License
 
 Distributed under the MIT License.
