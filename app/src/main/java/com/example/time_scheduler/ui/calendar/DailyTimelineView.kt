@@ -51,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -137,9 +138,9 @@ fun DailyTimelineView(
                 .verticalScroll(scrollState)
                 .padding(bottom = 80.dp)
         ) {
-            // Background Hour Lines & Time Labels
+            // Background Hour Lines & Time Labels (00:00 AM through 23:00 PM)
             Column(modifier = Modifier.fillMaxSize()) {
-                for (hour in 6..23) {
+                for (hour in 0..23) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -199,40 +200,44 @@ fun TimelineTaskCard(
     onEditTask: () -> Unit,
     onDragEnd: (LocalTime) -> Unit
 ) {
-    var offsetY by remember { mutableFloatStateOf(0f) }
+    val density = LocalDensity.current
+    var offsetYPx by remember { mutableFloatStateOf(0f) }
     var isMenuExpanded by remember { mutableStateOf(false) }
 
-    // Calculate Y offset based on start time (from 06:00 baseline)
-    val startHourOffset = (task.startTime.hour - 6) + (task.startTime.minute / 60f)
-    val topPx = startHourOffset * HOUR_HEIGHT_DP
+    // Convert hour height from dp to actual screen pixels for density-accurate positioning
+    val hourHeightPx = with(density) { HOUR_HEIGHT_DP.dp.toPx() }
+
+    // Calculate Y position in pixels based on start time (from 00:00 baseline)
+    val startHourOffset = task.startTime.hour + (task.startTime.minute / 60f)
+    val topPx = startHourOffset * hourHeightPx
     val heightDp = ((task.durationMinutes / 60f) * HOUR_HEIGHT_DP).coerceAtLeast(54f)
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .height(heightDp.dp)
-            .offset { IntOffset(0, (topPx + offsetY).roundToInt()) }
+            .offset { IntOffset(0, (topPx + offsetYPx).roundToInt()) }
             .pointerInput(task) {
                 detectDragGestures(
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        offsetY += dragAmount.y
+                        offsetYPx += dragAmount.y
                     },
                     onDragEnd = {
-                        // Calculate shifted time based on offset delta
-                        val hourDelta = offsetY / HOUR_HEIGHT_DP
+                        // Calculate shifted time based on offset delta in pixels
+                        val hourDelta = offsetYPx / hourHeightPx
                         val minutesDelta = (hourDelta * 60).roundToInt()
                         var newTime = task.startTime.plusMinutes(minutesDelta.toLong())
 
-                        // Clamp to valid hours 06:00 to 22:00
-                        if (newTime.isBefore(LocalTime.of(6, 0))) {
-                            newTime = LocalTime.of(6, 0)
+                        // Clamp to valid hours 00:00 to 23:59
+                        if (newTime.isBefore(LocalTime.of(0, 0))) {
+                            newTime = LocalTime.of(0, 0)
                         }
-                        if (newTime.isAfter(LocalTime.of(22, 0))) {
-                            newTime = LocalTime.of(22, 0)
+                        if (newTime.isAfter(LocalTime.of(23, 59))) {
+                            newTime = LocalTime.of(23, 59)
                         }
 
-                        offsetY = 0f
+                        offsetYPx = 0f
                         onDragEnd(newTime)
                     }
                 )
