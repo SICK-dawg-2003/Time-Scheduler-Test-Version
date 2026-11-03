@@ -323,13 +323,45 @@ fun CameraScanScreen(
                         OutlinedButton(
                             onClick = {
                                 val sampleText = """
-                                    09:00 AM - 10:00 AM Team Planning Meeting
-                                    11:30 AM Product Sprint Review
-                                    02:00 PM - 03:30 PM Gym & Cardio Workout
-                                    04:30 PM Study Android AI Scanner
+                                    7:00 - 8:00
+                                    Wake up
+                                    Get dressed and eat breakfast with mom & Dad
+                                    8:00 - 9:00
+                                    Play
+                                    Play with my favourite toys or go for a walk or cycling
+                                    9:00 - 10:00
+                                    Math Practice
+                                    Study Math and solve problems
+                                    10:00 - 11:00
+                                    Snack time
+                                    Eat snacks and do what I want to do (Creative activities)
+                                    11:00 - 12:00
+                                    Nap time
+                                    Take a nap or rest
+                                    12:00 - 1:00
+                                    Read Books
+                                    Read books or study English
+                                    1:00 - 2:00
+                                    Eat Lunch with family
+                                    Talk with family about my day. Have fun with them and eat lunch
+                                    2:00 - 3:00
+                                    Study Science and other subjects
+                                    Study
+                                    3:00 - 4:00
+                                    Nap time
+                                    Take a nap
+                                    4:00 - 5:00
+                                    Attend Lessons
+                                    Attend swimming lessons or gymnastics class
+                                    5:00 - 7:00
+                                    Play with dad & Eat Dinner
+                                    Play puzzles and spend time with dad and eat dinner and watch tv
+                                    7:00 - 8:30
+                                    Read books and go to bed
+                                    Take bath. Read my favourite books. Go to bed
                                 """.trimIndent()
                                 viewModel.processScannedImageText(sampleText)
-                                Toast.makeText(context, "Simulated scan loaded!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Loaded Daily Schedule sample scan!", Toast.LENGTH_SHORT).show()
                             }
                         ) {
                             Icon(
