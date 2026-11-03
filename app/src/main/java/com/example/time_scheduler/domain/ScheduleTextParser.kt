@@ -11,13 +11,24 @@ class ScheduleTextParser {
 
     /**
      * Parses raw OCR text lines from camera scan or image upload and extracts candidate schedule tasks.
-     * Enhanced to support multi-line text blocks, robust time parsing (12h/24h/am-pm/9am), rich title/description extraction, and smart category detection.
+     * Incorporates Stack Overflow OCR best practices:
+     * - Noise/header line filtering (TIME, ACTIVITY, NOTE)
+     * - Column & delimiter-aware table row splitting (|, \t, multi-space)
+     * - Multi-line sequential block parsing
+     * - Weighted keyword confidence scoring for smart Category classification
      */
     fun parseScannedText(rawText: String, targetDate: LocalDate = LocalDate.now()): List<TaskItem> {
-        val lines = rawText.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+        val rawLines = rawText.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+        
+        // Filter out table header noise like "TIME", "ACTIVITY", "NOTE", "DAILY SCHEDULE"
+        val headerNoise = setOf("time", "activity", "note", "notes", "daily schedule", "schedule", "timetable", "hours")
+        val lines = rawLines.filterNot { line ->
+            headerNoise.contains(line.lowercase().replace(Regex("""[^a-z\s]"""), "").trim())
+        }
+
         val parsedTasks = mutableListOf<TaskItem>()
 
-        // Flexible time range regex matching: "09:00 - 10:30", "9:00AM to 10:00AM", "9am - 10am", "14:00 - 15:30"
+        // Time range regex matching: "09:00 - 10:30", "9:00AM to 10:00AM", "9am - 10am", "14:00 - 15:30", "7:00 - 8:00"
         val timeRangeRegex = Regex(
             """(?i)(\b\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)\s*[-–—to]+\s*(\b\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)""",
             RegexOption.IGNORE_CASE
@@ -30,23 +41,57 @@ class ScheduleTextParser {
         var i = 0
         while (i < lines.size) {
             val line = lines[i]
-            val rangeMatch = timeRangeRegex.find(line)
 
+            // Check if line contains column delimiters like '|', '\t', or multi-space separators
+            val columns = line.split(Regex("""[|\t]|\s{2,}""")).map { it.trim() }.filter { it.isNotEmpty() }
+
+            if (columns.size >= 2) {
+                // Table layout: Column 0 is time, Column 1 is Activity Title, Column 2 is Note/Description
+                val timeColMatch = timeRangeRegex.find(columns[0])
+                if (timeColMatch != null) {
+                    val startStr = timeColMatch.groupValues[1].trim()
+                    val endStr = timeColMatch.groupValues[2].trim()
+                    val taskTitle = columns[1]
+                    val description = if (columns.size >= 3) columns[2] else "Imported from scanned schedule/flyer"
+
+                    val startTime = parseTime(startStr) ?: LocalTime.of(9, 0)
+                    val endTime = parseTime(endStr) ?: startTime.plusHours(1)
+                    val combinedText = "$taskTitle $description"
+
+                    parsedTasks.add(
+                        TaskItem(
+                            title = taskTitle,
+                            description = description,
+                            date = targetDate,
+                            startTime = startTime,
+                            endTime = endTime,
+                            category = detectCategory(combinedText)
+                        )
+                    )
+                    i++
+                    continue
+                }
+            }
+
+            // Single line / multi-line fallback matching
+            val rangeMatch = timeRangeRegex.find(line)
             if (rangeMatch != null) {
                 val startStr = rangeMatch.groupValues[1].trim()
                 val endStr = rangeMatch.groupValues[2].trim()
                 
-                // Extract title from same line or next line if empty
                 var title = line.removeRange(rangeMatch.range).trim().replace(Regex("""^[:\-\s•*]+"""), "").trim()
                 val description: String
 
                 // If title is empty on this line, check the next line for the title
                 if (title.isBlank() && i + 1 < lines.size) {
                     title = lines[i + 1].trim().replace(Regex("""^[:\-\s•*]+"""), "").trim()
-                    description = "Imported from scanned schedule/flyer"
-                    i++ // consume next line as title
+                    description = if (i + 2 < lines.size && !timeRangeRegex.containsMatchIn(lines[i + 2])) {
+                        lines[i + 2].trim()
+                    } else {
+                        "Imported from scanned schedule/flyer"
+                    }
+                    i++
                 } else if (i + 1 < lines.size && !timeRangeRegex.containsMatchIn(lines[i + 1])) {
-                    // Next line might be a description or notes
                     description = lines[i + 1].trim()
                 } else {
                     description = "Imported from scanned schedule/flyer"
@@ -102,7 +147,7 @@ class ScheduleTextParser {
         // Fallback: If no explicit times matched, treat text blocks as sequential tasks
         if (parsedTasks.isEmpty() && lines.isNotEmpty()) {
             var defaultStart = LocalTime.of(9, 0)
-            for ((index, line) in lines.take(6).withIndex()) {
+            for ((index, line) in lines.take(8).withIndex()) {
                 val cleanLine = line.replace(Regex("""^[:\-\s•*]+"""), "").trim()
                 if (cleanLine.isNotBlank() && cleanLine.length > 2) {
                     val parts = cleanLine.split(":", limit = 2)
@@ -152,15 +197,27 @@ class ScheduleTextParser {
         return null
     }
 
+    /**
+     * Confidence-scored Category Classifier.
+     * Evaluates weighted keyword occurrences across title and notes/description text.
+     */
     private fun detectCategory(text: String): Category {
-        val lower = text.lowercase()
-        return when {
-            lower.contains("work") || lower.contains("meeting") || lower.contains("sync") || lower.contains("project") || lower.contains("review") || lower.contains("client") || lower.contains("office") || lower.contains("standup") || lower.contains("team") -> Category.WORK
-            lower.contains("study") || lower.contains("read") || lower.contains("class") || lower.contains("exam") || lower.contains("homework") || lower.contains("lecture") || lower.contains("assignment") || lower.contains("research") || lower.contains("quiz") -> Category.STUDY
-            lower.contains("gym") || lower.contains("health") || lower.contains("doctor") || lower.contains("run") || lower.contains("workout") || lower.contains("cardio") || lower.contains("yoga") || lower.contains("meditation") || lower.contains("hospital") || lower.contains("fitness") -> Category.HEALTH
-            lower.contains("urgent") || lower.contains("priority") || lower.contains("deadline") || lower.contains("asap") || lower.contains("important") || lower.contains("exam") -> Category.URGENT
-            lower.contains("lunch") || lower.contains("dinner") || lower.contains("movie") || lower.contains("coffee") || lower.contains("personal") || lower.contains("family") || lower.contains("birthday") || lower.contains("party") || lower.contains("home") -> Category.PERSONAL
-            else -> Category.OTHER
-        }
+        val lower = text.lowercase(Locale.ROOT)
+        val scores = mutableMapOf<Category, Int>().withDefault { 0 }
+
+        val workKeywords = listOf("work", "meeting", "sync", "project", "review", "client", "office", "standup", "team", "planning", "sprint")
+        val studyKeywords = listOf("study", "read", "books", "class", "exam", "homework", "lecture", "assignment", "research", "quiz", "math", "science", "english", "lessons", "practice")
+        val healthKeywords = listOf("gym", "health", "doctor", "run", "workout", "cardio", "yoga", "meditation", "hospital", "fitness", "nap", "sleep", "walk", "cycling", "bath", "rest")
+        val urgentKeywords = listOf("urgent", "priority", "deadline", "asap", "important", "exam", "critical")
+        val personalKeywords = listOf("wake up", "play", "snack", "lunch", "dinner", "movie", "coffee", "personal", "family", "birthday", "party", "home", "dad", "mom", "toys", "puzzles", "tv")
+
+        for (kw in workKeywords) if (lower.contains(kw)) scores[Category.WORK] = scores.getValue(Category.WORK) + 1
+        for (kw in studyKeywords) if (lower.contains(kw)) scores[Category.STUDY] = scores.getValue(Category.STUDY) + 1
+        for (kw in healthKeywords) if (lower.contains(kw)) scores[Category.HEALTH] = scores.getValue(Category.HEALTH) + 1
+        for (kw in urgentKeywords) if (lower.contains(kw)) scores[Category.URGENT] = scores.getValue(Category.URGENT) + 1
+        for (kw in personalKeywords) if (lower.contains(kw)) scores[Category.PERSONAL] = scores.getValue(Category.PERSONAL) + 1
+
+        val maxEntry = scores.maxByOrNull { it.value }
+        return if (maxEntry != null && maxEntry.value > 0) maxEntry.key else Category.OTHER
     }
 }
