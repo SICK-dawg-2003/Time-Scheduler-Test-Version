@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -102,6 +103,35 @@ fun CameraScanScreen(
         }
     }
 
+    val textRecognizer = remember { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
+
+    // Gallery image picker launcher for Android Studio simulator testing
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let { selectedUri ->
+            try {
+                val image = InputImage.fromFilePath(context, selectedUri)
+                Toast.makeText(context, "Scanning text from selected image...", Toast.LENGTH_SHORT).show()
+                textRecognizer.process(image)
+                    .addOnSuccessListener { visionText ->
+                        val rawText = visionText.text
+                        if (rawText.isNotBlank()) {
+                            viewModel.processScannedImageText(rawText)
+                            Toast.makeText(context, "Successfully extracted text from image!", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "No text found in selected image.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        Toast.makeText(context, "OCR failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Error loading image: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         if (!hasCameraPermission) {
             launcher.launch(Manifest.permission.CAMERA)
@@ -121,7 +151,6 @@ fun CameraScanScreen(
     // Reference to trigger capture from composable UI
     var imageCaptureRef by remember { mutableStateOf<ImageCapture?>(null) }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
-    val textRecognizer = remember { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
 
     Column(
         modifier = modifier
@@ -276,25 +305,41 @@ fun CameraScanScreen(
                         fontWeight = FontWeight.Bold
                     )
 
-                    OutlinedButton(
-                        onClick = {
-                            val sampleText = """
-                                09:00 AM - 10:00 AM Team Planning Meeting
-                                11:30 AM Product Sprint Review
-                                02:00 PM - 03:30 PM Gym & Cardio Workout
-                                04:30 PM Study Android AI Scanner
-                            """.trimIndent()
-                            viewModel.processScannedImageText(sampleText)
-                            Toast.makeText(context, "Simulated scan loaded!", Toast.LENGTH_SHORT).show()
-                        }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Schedule,
-                            contentDescription = "Sample Scan",
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Simulate Sample Scan", fontSize = 12.sp)
+                        OutlinedButton(
+                            onClick = { galleryLauncher.launch("image/*") }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Image,
+                                contentDescription = "Upload Image",
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Upload Image", fontSize = 11.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                val sampleText = """
+                                    09:00 AM - 10:00 AM Team Planning Meeting
+                                    11:30 AM Product Sprint Review
+                                    02:00 PM - 03:30 PM Gym & Cardio Workout
+                                    04:30 PM Study Android AI Scanner
+                                """.trimIndent()
+                                viewModel.processScannedImageText(sampleText)
+                                Toast.makeText(context, "Simulated scan loaded!", Toast.LENGTH_SHORT).show()
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Schedule,
+                                contentDescription = "Sample Scan",
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Simulate Sample", fontSize = 11.sp)
+                        }
                     }
                 }
 
