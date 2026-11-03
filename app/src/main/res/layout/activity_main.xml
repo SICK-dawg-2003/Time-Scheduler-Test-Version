@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Time Scheduler Application (UniSync)
+    Main Dashboard Activity Layout Definition
+-->
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/mainContainer"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".MainActivity">
+
+    <!--
+        Main Dashboard Container:
+        Renders the Jetpack Compose UI layout tree including:
+        1. Top Bar & Date Strip Header
+        2. Category Filter Pills
+        3. 24-Hour Interactive Timeline Grid
+        4. Floating Add Task Action Button
+        5. Bottom Navigation Bar (Calendar vs Camera Scanner)
+    -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+</FrameLayout>
