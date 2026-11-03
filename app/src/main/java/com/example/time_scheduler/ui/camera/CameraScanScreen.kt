@@ -4,10 +4,12 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -30,6 +32,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DocumentScanner
@@ -38,6 +41,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -48,10 +52,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,6 +74,7 @@ import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 @Composable
@@ -90,6 +95,11 @@ fun CameraScanScreen(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         hasCameraPermission = isGranted
+        if (isGranted) {
+            Toast.makeText(context, "Camera permission granted", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "Camera permission denied", Toast.LENGTH_SHORT).show()
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -102,12 +112,23 @@ fun CameraScanScreen(
         mutableStateListOf<TaskItem>().apply { addAll(candidateTasks) }
     }
 
+    // Keep selected tasks in sync when candidateTasks change
+    LaunchedEffect(candidateTasks) {
+        selectedTasks.clear()
+        selectedTasks.addAll(candidateTasks)
+    }
+
+    // Reference to trigger capture from composable UI
+    var imageCaptureRef by remember { mutableStateOf<ImageCapture?>(null) }
+    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+    val textRecognizer = remember { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Camera Finder View or Permission Prompt
+        // Camera Viewfinder Box
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -116,16 +137,17 @@ fun CameraScanScreen(
             contentAlignment = Alignment.Center
         ) {
             if (hasCameraPermission) {
-                CameraPreviewView(
-                    onTextExtracted = { rawText ->
-                        viewModel.processScannedImageText(rawText)
+                CameraPreviewWithCapture(
+                    onImageCaptureCreated = { imageCaptureRef = it },
+                    onError = { e ->
+                        Toast.makeText(context, "Camera capture failed: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
                 )
 
                 // Scanner Reticle Overlay
                 Box(
                     modifier = Modifier
-                        .size(280.dp, 180.dp)
+                        .size(300.dp, 200.dp)
                         .border(
                             width = 2.dp,
                             color = MaterialTheme.colorScheme.primary,
@@ -133,6 +155,7 @@ fun CameraScanScreen(
                         )
                 )
 
+                // Top Instruction Banner
                 Column(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
@@ -140,7 +163,7 @@ fun CameraScanScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Surface(
-                        color = Color.Black.copy(alpha = 0.6f),
+                        color = Color.Black.copy(alpha = 0.7f),
                         shape = RoundedCornerShape(20.dp)
                     ) {
                         Row(
@@ -155,7 +178,7 @@ fun CameraScanScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Point camera at schedule, timetable, or event flyer",
+                                text = "Frame schedule inside reticle & tap capture",
                                 color = Color.White,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium
@@ -163,6 +186,45 @@ fun CameraScanScreen(
                         }
                     }
                 }
+
+                // Shutter / Capture Button at bottom of camera viewfinder
+                FloatingActionButton(
+                    onClick = {
+                        imageCaptureRef?.let { imageCapture ->
+                            Toast.makeText(context, "Scanning text in front of camera...", Toast.LENGTH_SHORT).show()
+                            takePhotoAndRecognizeText(
+                                imageCapture = imageCapture,
+                                executor = cameraExecutor,
+                                textRecognizer = textRecognizer,
+                                onTextExtracted = { rawText ->
+                                    if (rawText.isNotBlank()) {
+                                        viewModel.processScannedImageText(rawText)
+                                        Toast.makeText(context, "Extracted schedule text successfully!", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "No readable text found. Please hold steady.", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                onError = { e ->
+                                    Toast.makeText(context, "Error scanning text: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        } ?: Toast.makeText(context, "Camera is still initializing...", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 24.dp)
+                        .size(72.dp),
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Camera,
+                        contentDescription = "Capture & Scan Text",
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+
             } else {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -196,7 +258,7 @@ fun CameraScanScreen(
             }
         }
 
-        // Action Controls Bar (includes Sample Scanner Trigger for easy testing)
+        // Action Controls & Detected Candidate Tasks Bar
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surface,
@@ -209,7 +271,7 @@ fun CameraScanScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Schedule OCR Scanner",
+                        text = "AI Text Recognition & Scanner",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -223,6 +285,7 @@ fun CameraScanScreen(
                                 04:30 PM Study Android AI Scanner
                             """.trimIndent()
                             viewModel.processScannedImageText(sampleText)
+                            Toast.makeText(context, "Simulated scan loaded!", Toast.LENGTH_SHORT).show()
                         }
                     ) {
                         Icon(
@@ -239,7 +302,7 @@ fun CameraScanScreen(
                 if (candidateTasks.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "Detected ${candidateTasks.size} Tasks from Image:",
+                        text = "Detected ${candidateTasks.size} Tasks from Camera / Text:",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary
@@ -249,7 +312,7 @@ fun CameraScanScreen(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(180.dp)
+                            .height(160.dp)
                     ) {
                         items(candidateTasks) { task ->
                             val isChecked = selectedTasks.contains(task)
@@ -309,7 +372,10 @@ fun CameraScanScreen(
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
-                            onClick = { viewModel.confirmImportScannedTasks(selectedTasks) },
+                            onClick = {
+                                viewModel.confirmImportScannedTasks(selectedTasks)
+                                Toast.makeText(context, "Successfully imported ${selectedTasks.size} tasks to calendar!", Toast.LENGTH_SHORT).show()
+                            },
                             enabled = selectedTasks.isNotEmpty()
                         ) {
                             Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -321,15 +387,20 @@ fun CameraScanScreen(
             }
         }
     }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            cameraExecutor.shutdown()
+        }
+    }
 }
 
 @Composable
-fun CameraPreviewView(
-    onTextExtracted: (String) -> Unit
+fun CameraPreviewWithCapture(
+    onImageCaptureCreated: (ImageCapture) -> Unit,
+    onError: (Exception) -> Unit
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
-    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
-    val textRecognizer = remember { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
 
     AndroidView(
         factory = { ctx ->
@@ -342,13 +413,11 @@ fun CameraPreviewView(
                     it.surfaceProvider = previewView.surfaceProvider
                 }
 
-                val imageAnalysis = ImageAnalysis.Builder()
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                val imageCapture = ImageCapture.Builder()
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                     .build()
 
-                imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
-                    processImageProxy(imageProxy, textRecognizer, onTextExtracted)
-                }
+                onImageCaptureCreated(imageCapture)
 
                 try {
                     cameraProvider.unbindAll()
@@ -356,42 +425,52 @@ fun CameraPreviewView(
                         lifecycleOwner,
                         CameraSelector.DEFAULT_BACK_CAMERA,
                         preview,
-                        imageAnalysis
+                        imageCapture
                     )
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    onError(e)
+                }
             }, ContextCompat.getMainExecutor(ctx))
 
             previewView
         },
         modifier = Modifier.fillMaxSize()
     )
-
-    DisposableEffect(Unit) {
-        onDispose {
-            cameraExecutor.shutdown()
-        }
-    }
 }
 
 @SuppressLint("UnsafeOptInUsageError")
-private fun processImageProxy(
-    imageProxy: ImageProxy,
+private fun takePhotoAndRecognizeText(
+    imageCapture: ImageCapture,
+    executor: ExecutorService,
     textRecognizer: TextRecognizer,
-    onTextExtracted: (String) -> Unit
+    onTextExtracted: (String) -> Unit,
+    onError: (Exception) -> Unit
 ) {
-    val mediaImage = imageProxy.image
-    if (mediaImage != null) {
-        val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-        textRecognizer.process(image)
-            .addOnSuccessListener { visionText: Text ->
-                if (visionText.text.isNotBlank()) {
-                    onTextExtracted(visionText.text)
+    imageCapture.takePicture(
+        executor,
+        object : ImageCapture.OnImageCapturedCallback() {
+            override fun onError(exception: ImageCaptureException) {
+                onError(exception)
+            }
+
+            override fun onCaptureSuccess(imageProxy: ImageProxy) {
+                val mediaImage = imageProxy.image
+                if (mediaImage != null) {
+                    val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+                    textRecognizer.process(image)
+                        .addOnSuccessListener { visionText: Text ->
+                            onTextExtracted(visionText.text)
+                        }
+                        .addOnFailureListener { e ->
+                            onError(Exception(e))
+                        }
+                        .addOnCompleteListener {
+                            imageProxy.close()
+                        }
+                } else {
+                    imageProxy.close()
                 }
             }
-            .addOnCompleteListener {
-                imageProxy.close()
-            }
-    } else {
-        imageProxy.close()
-    }
+        }
+    )
 }
