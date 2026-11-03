@@ -71,6 +71,12 @@ class ScheduleViewModel @JvmOverloads constructor(
         _scannedCandidateTasks.value = emptyList()
     }
 
+    fun updateScannedCandidateTask(updatedTask: TaskItem) {
+        _scannedCandidateTasks.value = _scannedCandidateTasks.value.map { task ->
+            if (task.id == updatedTask.id) updatedTask else task
+        }
+    }
+
     fun clearScannedCandidates() {
         _scannedCandidateTasks.value = emptyList()
     }

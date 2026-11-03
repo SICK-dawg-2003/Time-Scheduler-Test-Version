@@ -16,6 +16,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
@@ -70,6 +72,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.example.time_scheduler.data.TaskItem
 import com.example.time_scheduler.ui.ScheduleViewModel
+import com.example.time_scheduler.ui.calendar.TaskDialog
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
@@ -147,6 +150,9 @@ fun CameraScanScreen(
         selectedTasks.clear()
         selectedTasks.addAll(candidateTasks)
     }
+
+    // State for editing a scanned candidate task
+    var editingCandidateTask by remember { mutableStateOf<TaskItem?>(null) }
 
     // Reference to trigger capture from composable UI
     var imageCaptureRef by remember { mutableStateOf<ImageCapture?>(null) }
@@ -379,8 +385,8 @@ fun CameraScanScreen(
                 if (candidateTasks.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "Detected ${candidateTasks.size} Tasks from Camera / Text:",
-                        fontSize = 13.sp,
+                        text = "Recognized ${candidateTasks.size} Tasks (Tap any task to edit Title, Category, or Notes):",
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -389,14 +395,15 @@ fun CameraScanScreen(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(160.dp)
+                            .height(180.dp)
                     ) {
                         items(candidateTasks) { task ->
                             val isChecked = selectedTasks.contains(task)
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
+                                    .padding(vertical = 4.dp)
+                                    .clickable { editingCandidateTask = task },
                                 colors = CardDefaults.cardColors(
                                     containerColor = task.category.color.copy(alpha = 0.15f)
                                 ),
@@ -405,7 +412,7 @@ fun CameraScanScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                        .padding(horizontal = 8.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Checkbox(
@@ -414,25 +421,55 @@ fun CameraScanScreen(
                                             if (checked) selectedTasks.add(task) else selectedTasks.remove(task)
                                         }
                                     )
-                                    Box(
-                                        modifier = Modifier
-                                            .size(10.dp)
-                                            .clip(CircleShape)
-                                            .background(task.category.color)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(10.dp)
+                                                    .clip(CircleShape)
+                                                    .background(task.category.color)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = task.title,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Surface(
+                                                color = task.category.color.copy(alpha = 0.3f),
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = task.category.displayName,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = task.title,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 13.sp
-                                        )
-                                        Text(
-                                            text = "${task.formattedTimeString} • ${task.category.displayName}",
+                                            text = "Note: ${task.description}",
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
+                                        Text(
+                                            text = "Time: ${task.formattedTimeString}",
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Medium
+                                        )
                                     }
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Edit Task",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
                                 }
                             }
                         }
@@ -463,6 +500,20 @@ fun CameraScanScreen(
                 }
             }
         }
+    }
+
+    // Edit Dialog for scanned candidate task
+    editingCandidateTask?.let { taskToEdit ->
+        TaskDialog(
+            initialTask = taskToEdit,
+            selectedDate = taskToEdit.date,
+            onDismiss = { editingCandidateTask = null },
+            onSaveTask = { updatedTask ->
+                viewModel.updateScannedCandidateTask(updatedTask)
+                editingCandidateTask = null
+                Toast.makeText(context, "Scanned task updated successfully!", Toast.LENGTH_SHORT).show()
+            }
+        )
     }
 
     DisposableEffect(Unit) {
