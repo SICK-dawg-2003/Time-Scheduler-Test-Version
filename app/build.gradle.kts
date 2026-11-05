@@ -55,8 +55,9 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
-    // ML Kit Text Recognition
+    // ML Kit Text Recognition & Document Scanner
     implementation(libs.play.services.mlkit.text.recognition)
+    implementation(libs.play.services.mlkit.document.scanner)
 
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

@@ -7,6 +7,7 @@ import com.example.time_scheduler.data.TaskItem
 import com.example.time_scheduler.domain.ScheduleConflict
 import com.example.time_scheduler.domain.ScheduleTextParser
 import com.example.time_scheduler.repository.ScheduleRepository
+import com.google.mlkit.vision.text.Text
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,6 +63,13 @@ class ScheduleViewModel @JvmOverloads constructor(
     fun processScannedImageText(rawText: String) {
         _isScanning.value = true
         val candidates = textParser.parseScannedText(rawText, selectedDate.value)
+        _scannedCandidateTasks.value = candidates
+        _isScanning.value = false
+    }
+
+    fun processVisionTextHierarchy(visionText: Text) {
+        _isScanning.value = true
+        val candidates = textParser.parseVisionTextHierarchy(visionText, selectedDate.value)
         _scannedCandidateTasks.value = candidates
         _isScanning.value = false
     }

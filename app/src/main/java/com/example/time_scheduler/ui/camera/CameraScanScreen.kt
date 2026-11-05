@@ -2,10 +2,12 @@ package com.example.time_scheduler.ui.camera
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
@@ -33,6 +35,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
@@ -74,6 +77,9 @@ import com.example.time_scheduler.data.TaskItem
 import com.example.time_scheduler.ui.ScheduleViewModel
 import com.example.time_scheduler.ui.calendar.TaskDialog
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
@@ -108,6 +114,41 @@ fun CameraScanScreen(
 
     val textRecognizer = remember { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
 
+    // ML Kit Document Scanner API options & launcher
+    val docScannerOptions = remember {
+        GmsDocumentScannerOptions.Builder()
+            .setGalleryImportAllowed(true)
+            .setPageLimit(1)
+            .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
+            .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
+            .build()
+    }
+    val docScanner = remember { GmsDocumentScanning.getClient(docScannerOptions) }
+
+    val docScannerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val gmsResult = GmsDocumentScanningResult.fromActivityResultIntent(result.data)
+            gmsResult?.pages?.firstOrNull()?.imageUri?.let { cleanImageUri ->
+                try {
+                    val inputImage = InputImage.fromFilePath(context, cleanImageUri)
+                    Toast.makeText(context, "Analyzing clean document text hierarchy...", Toast.LENGTH_SHORT).show()
+                    textRecognizer.process(inputImage)
+                        .addOnSuccessListener { visionText ->
+                            viewModel.processVisionTextHierarchy(visionText)
+                            Toast.makeText(context, "Document OCR processed successfully!", Toast.LENGTH_SHORT).show()
+                        }
+                        .addOnFailureListener { e ->
+                            Toast.makeText(context, "OCR failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Error loading document image: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     // Gallery image picker launcher for Android Studio simulator testing
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -118,13 +159,8 @@ fun CameraScanScreen(
                 Toast.makeText(context, "Scanning text from selected image...", Toast.LENGTH_SHORT).show()
                 textRecognizer.process(image)
                     .addOnSuccessListener { visionText ->
-                        val rawText = visionText.text
-                        if (rawText.isNotBlank()) {
-                            viewModel.processScannedImageText(rawText)
-                            Toast.makeText(context, "Successfully extracted text from image!", Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(context, "No text found in selected image.", Toast.LENGTH_SHORT).show()
-                        }
+                        viewModel.processVisionTextHierarchy(visionText)
+                        Toast.makeText(context, "Successfully extracted text from image!", Toast.LENGTH_SHORT).show()
                     }
                     .addOnFailureListener { e ->
                         Toast.makeText(context, "OCR failed: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -231,13 +267,9 @@ fun CameraScanScreen(
                                 imageCapture = imageCapture,
                                 executor = cameraExecutor,
                                 textRecognizer = textRecognizer,
-                                onTextExtracted = { rawText ->
-                                    if (rawText.isNotBlank()) {
-                                        viewModel.processScannedImageText(rawText)
-                                        Toast.makeText(context, "Extracted schedule text successfully!", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(context, "No readable text found. Please hold steady.", Toast.LENGTH_SHORT).show()
-                                    }
+                                onVisionTextExtracted = { visionText ->
+                                    viewModel.processVisionTextHierarchy(visionText)
+                                    Toast.makeText(context, "Extracted schedule text successfully!", Toast.LENGTH_SHORT).show()
                                 },
                                 onError = { e ->
                                     Toast.makeText(context, "Error scanning text: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -314,6 +346,32 @@ fun CameraScanScreen(
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        // Google ML Kit Document Scanner pre-built UI button
+                        Button(
+                            onClick = {
+                                val activity = context as? Activity
+                                if (activity != null) {
+                                    docScanner.getStartScanIntent(activity)
+                                        .addOnSuccessListener { intentSender ->
+                                            docScannerLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+                                        }
+                                        .addOnFailureListener { e ->
+                                            Toast.makeText(context, "Doc scanner unavailable: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                } else {
+                                    Toast.makeText(context, "Unable to launch document scanner", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = "ML Kit Document Scanner",
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Doc Scanner AI", fontSize = 11.sp)
+                        }
+
                         OutlinedButton(
                             onClick = { galleryLauncher.launch("image/*") }
                         ) {
@@ -571,7 +629,7 @@ private fun takePhotoAndRecognizeText(
     imageCapture: ImageCapture,
     executor: ExecutorService,
     textRecognizer: TextRecognizer,
-    onTextExtracted: (String) -> Unit,
+    onVisionTextExtracted: (Text) -> Unit,
     onError: (Exception) -> Unit
 ) {
     imageCapture.takePicture(
@@ -587,7 +645,7 @@ private fun takePhotoAndRecognizeText(
                     val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
                     textRecognizer.process(image)
                         .addOnSuccessListener { visionText: Text ->
-                            onTextExtracted(visionText.text)
+                            onVisionTextExtracted(visionText)
                         }
                         .addOnFailureListener { e ->
                             onError(Exception(e))

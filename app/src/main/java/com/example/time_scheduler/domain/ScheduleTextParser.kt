@@ -2,12 +2,115 @@ package com.example.time_scheduler.domain
 
 import com.example.time_scheduler.data.Category
 import com.example.time_scheduler.data.TaskItem
+import com.google.mlkit.vision.text.Text
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.abs
 
 class ScheduleTextParser {
+
+    /**
+     * Parses ML Kit Vision Text hierarchy (Blocks -> Lines -> Elements) utilizing spatial bounding box coordinates
+     * to accurately group table rows and map out Time, Task Title Name, and Notes/Description columns.
+     */
+    fun parseVisionTextHierarchy(
+        visionText: Text,
+        targetDate: LocalDate = LocalDate.now()
+    ): List<TaskItem> {
+        val allLines = visionText.textBlocks.flatMap { it.lines }
+        if (allLines.isEmpty()) {
+            return parseScannedText(visionText.text, targetDate)
+        }
+
+        // Filter out table header noise lines
+        val headerNoise = setOf("time", "activity", "note", "notes", "daily schedule", "schedule", "timetable", "hours")
+        val validLines = allLines.filterNot { line ->
+            headerNoise.contains(line.text.lowercase().replace(Regex("""[^a-z\s]"""), "").trim())
+        }
+
+        // Group lines horizontally into rows based on Y-coordinate bounding box overlap
+        val rows = mutableListOf<MutableList<Text.Line>>()
+        val sortedLines = validLines.sortedBy { it.boundingBox?.top ?: 0 }
+
+        for (line in sortedLines) {
+            val lineTop = line.boundingBox?.top ?: 0
+            val lineBottom = line.boundingBox?.bottom ?: 0
+            val lineCenterY = (lineTop + lineBottom) / 2
+
+            // Find an existing row where Y-centers are close (within 25 pixels)
+            val matchingRow = rows.find { row ->
+                val rowCenterY = row.map { (it.boundingBox?.top ?: 0) + (it.boundingBox?.bottom ?: 0) }.average().toInt()
+                abs(rowCenterY - lineCenterY) < 30
+            }
+
+            if (matchingRow != null) {
+                matchingRow.add(line)
+            } else {
+                rows.add(mutableListOf(line))
+            }
+        }
+
+        val parsedTasks = mutableListOf<TaskItem>()
+        val timeRangeRegex = Regex(
+            """(?i)(\b\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)\s*[-–—to]+\s*(\b\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)""",
+            RegexOption.IGNORE_CASE
+        )
+
+        for (row in rows) {
+            // Sort items in this row from left to right by boundingBox.left
+            val sortedRowItems = row.sortedBy { it.boundingBox?.left ?: 0 }
+            
+            // Look for time range match in the row
+            val timeLineIndex = sortedRowItems.indexOfFirst { timeRangeRegex.containsMatchIn(it.text) }
+            if (timeLineIndex != -1) {
+                val timeLine = sortedRowItems[timeLineIndex]
+                val rangeMatch = timeRangeRegex.find(timeLine.text)!!
+                val startStr = rangeMatch.groupValues[1].trim()
+                val endStr = rangeMatch.groupValues[2].trim()
+
+                // Items to the right of time are Title and Description
+                val remainingLines = sortedRowItems.filterIndexed { index, _ -> index != timeLineIndex }
+
+                var taskTitle = ""
+                var description = "Imported via Document Scan"
+
+                if (remainingLines.isNotEmpty()) {
+                    taskTitle = remainingLines[0].text.trim().replace(Regex("""^[:\-\s•*]+"""), "")
+                    if (remainingLines.size >= 2) {
+                        description = remainingLines.subList(1, remainingLines.size).joinToString(" ") { it.text.trim() }
+                    }
+                }
+
+                if (taskTitle.isBlank()) {
+                    taskTitle = "Scanned Event"
+                }
+
+                val startTime = parseTime(startStr) ?: LocalTime.of(9, 0)
+                val endTime = parseTime(endStr) ?: startTime.plusHours(1)
+                val combinedText = "$taskTitle $description"
+
+                parsedTasks.add(
+                    TaskItem(
+                        title = taskTitle,
+                        description = description,
+                        date = targetDate,
+                        startTime = startTime,
+                        endTime = endTime,
+                        category = detectCategory(combinedText)
+                    )
+                )
+            }
+        }
+
+        // If spatial row extraction didn't yield tasks, fall back to plain text parser
+        return if (parsedTasks.isNotEmpty()) {
+            parsedTasks.sortedBy { it.startTime }
+        } else {
+            parseScannedText(visionText.text, targetDate)
+        }
+    }
 
     /**
      * Parses raw OCR text lines from camera scan or image upload and extracts candidate schedule tasks.
