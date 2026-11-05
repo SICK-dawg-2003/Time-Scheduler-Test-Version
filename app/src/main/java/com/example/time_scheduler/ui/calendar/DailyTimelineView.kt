@@ -138,9 +138,11 @@ fun DailyTimelineView(
                 .verticalScroll(scrollState)
                 .padding(bottom = 80.dp)
         ) {
-            // Background Hour Lines & Time Labels (00:00 AM through 23:00 PM)
+            // Background Hour Lines & Time Labels (12:00 AM through 11:00 PM)
             Column(modifier = Modifier.fillMaxSize()) {
+                val hourFormatter = DateTimeFormatter.ofPattern("h:mm a")
                 for (hour in 0..23) {
+                    val hourLabel = LocalTime.of(hour, 0).format(hourFormatter)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -148,13 +150,13 @@ fun DailyTimelineView(
                         verticalAlignment = Alignment.Top
                     ) {
                         Text(
-                            text = String.format("%02d:00", hour),
-                            fontSize = 12.sp,
+                            text = hourLabel,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
-                                .width(54.dp)
-                                .padding(start = 12.dp, top = 4.dp)
+                                .width(68.dp)
+                                .padding(start = 8.dp, top = 4.dp)
                         )
 
                         Box(
@@ -176,7 +178,7 @@ fun DailyTimelineView(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = 58.dp, end = 12.dp)
+                    .padding(start = 72.dp, end = 12.dp)
             ) {
                 tasks.forEach { task ->
                     TimelineTaskCard(
