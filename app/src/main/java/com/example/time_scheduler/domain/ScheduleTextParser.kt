@@ -39,7 +39,7 @@ class ScheduleTextParser {
             val lineBottom = line.boundingBox?.bottom ?: 0
             val lineCenterY = (lineTop + lineBottom) / 2
 
-            // Find an existing row where Y-centers are close (within 25 pixels)
+            // Find an existing row where Y-centers are close (within 30 pixels)
             val matchingRow = rows.find { row ->
                 val rowCenterY = row.map { (it.boundingBox?.top ?: 0) + (it.boundingBox?.bottom ?: 0) }.average().toInt()
                 abs(rowCenterY - lineCenterY) < 30
