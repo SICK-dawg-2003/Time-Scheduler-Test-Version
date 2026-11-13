@@ -41,14 +41,20 @@ fun CalendarScreen(
     val conflicts by viewModel.conflicts.collectAsState()
     val categoryFilter by viewModel.selectedCategoryFilter.collectAsState()
 
+    var currentViewMode by remember { mutableStateOf(CalendarViewMode.DAY) }
     var taskToEdit by remember { mutableStateOf<TaskItem?>(null) }
     var isShowAddDialog by remember { mutableStateOf(false) }
 
-    // Filter tasks by selected date and optional category filter
+    // Filter tasks by selected date and optional category filter for single day
     val filteredTasks = remember(allTasks, selectedDate, categoryFilter) {
         allTasks.filter { task ->
             task.date == selectedDate && (categoryFilter == null || task.category == categoryFilter)
         }.sortedBy { it.startTime }
+    }
+
+    // Filter all tasks by category filter for multi-day/week/month views
+    val categoryFilteredAllTasks = remember(allTasks, categoryFilter) {
+        if (categoryFilter == null) allTasks else allTasks.filter { it.category == categoryFilter }
     }
 
     Scaffold(
@@ -114,23 +120,47 @@ fun CalendarScreen(
                 selectedDate = selectedDate,
                 onDateSelected = { viewModel.onDateSelected(it) },
                 selectedCategoryFilter = categoryFilter,
-                onCategoryFilterSelected = { viewModel.onCategoryFilterSelected(it) }
+                onCategoryFilterSelected = { viewModel.onCategoryFilterSelected(it) },
+                viewMode = currentViewMode,
+                onViewModeSelected = { currentViewMode = it }
             )
 
             Box(modifier = Modifier.weight(1f)) {
-                DailyTimelineView(
-                    tasks = filteredTasks,
-                    conflicts = conflicts,
-                    onToggleTaskCompletion = { viewModel.toggleTaskCompletion(it) },
-                    onDropTask = { viewModel.dropTask(it) },
-                    onEditTask = { taskToEdit = it },
-                    onTaskDragged = { task, newTime -> viewModel.onTaskDragged(task, newTime) },
-                    onAutoResolveConflicts = {
-                        conflicts.firstOrNull()?.let { conflict ->
-                            viewModel.onTaskDragged(conflict.taskB, conflict.taskA.endTime.plusMinutes(15))
-                        }
+                when (currentViewMode) {
+                    CalendarViewMode.DAY -> {
+                        DailyTimelineView(
+                            tasks = filteredTasks,
+                            conflicts = conflicts,
+                            onToggleTaskCompletion = { viewModel.toggleTaskCompletion(it) },
+                            onDropTask = { viewModel.dropTask(it) },
+                            onEditTask = { taskToEdit = it },
+                            onTaskDragged = { task, newTime -> viewModel.onTaskDragged(task, newTime) },
+                            onAutoResolveConflicts = {
+                                conflicts.firstOrNull()?.let { conflict ->
+                                    viewModel.onTaskDragged(conflict.taskB, conflict.taskA.endTime.plusMinutes(15))
+                                }
+                            }
+                        )
                     }
-                )
+
+                    CalendarViewMode.WEEK -> {
+                        WeeklyGridView(
+                            selectedDate = selectedDate,
+                            tasks = categoryFilteredAllTasks,
+                            onDateSelected = { viewModel.onDateSelected(it) },
+                            onEditTask = { taskToEdit = it }
+                        )
+                    }
+
+                    CalendarViewMode.MONTH -> {
+                        MonthlyGridView(
+                            selectedDate = selectedDate,
+                            tasks = categoryFilteredAllTasks,
+                            onDateSelected = { viewModel.onDateSelected(it) },
+                            onEditTask = { taskToEdit = it }
+                        )
+                    }
+                }
             }
         }
 

@@ -1,0 +1,168 @@
+package com.example.time_scheduler.ui.calendar
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.time_scheduler.data.TaskItem
+import java.time.LocalDate
+import java.time.YearMonth
+
+@Composable
+fun MonthlyGridView(
+    selectedDate: LocalDate,
+    tasks: List<TaskItem>,
+    onDateSelected: (LocalDate) -> Unit,
+    onEditTask: (TaskItem) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val yearMonth = remember(selectedDate) { YearMonth.from(selectedDate) }
+    val firstDayOfMonth = remember(yearMonth) { yearMonth.atDay(1) }
+    val daysInMonth = yearMonth.lengthOfMonth()
+
+    // Sunday = 0, Monday = 1 ...
+    val firstDayOfWeekOffset = firstDayOfMonth.dayOfWeek.value % 7
+
+    // Build 35 or 42 grid cells for full calendar page
+    val gridDates = remember(firstDayOfMonth, daysInMonth, firstDayOfWeekOffset) {
+        val startDate = firstDayOfMonth.minusDays(firstDayOfWeekOffset.toLong())
+        (0..41).map { startDate.plusDays(it.toLong()) }
+    }
+
+    val dayOfWeekNames = listOf("SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT")
+
+    Column(modifier = modifier.fillMaxSize().padding(8.dp)) {
+        // Day of Week Header Row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceAround
+        ) {
+            dayOfWeekNames.forEach { dayName ->
+                Text(
+                    text = dayName,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+        // 6x7 Calendar Days Grid
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(7),
+            modifier = Modifier.fillMaxSize().padding(top = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            items(gridDates) { date ->
+                val isCurrentMonth = date.month == selectedDate.month
+                val isSelected = date == selectedDate
+                val isToday = date == LocalDate.now()
+                val dayTasks = tasks.filter { it.date == date }
+
+                Card(
+                    modifier = Modifier
+                        .aspectRatio(0.85f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onDateSelected(date) },
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                        else if (isToday) MaterialTheme.colorScheme.surfaceVariant
+                        else if (isCurrentMonth) MaterialTheme.colorScheme.surface
+                        else MaterialTheme.colorScheme.surfaceContainerLowest
+                    ),
+                    border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = date.dayOfMonth.toString(),
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                            else if (!isCurrentMonth) MaterialTheme.colorScheme.outline
+                            else if (isToday) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        // Task Pills / Indicators
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            dayTasks.take(3).forEach { task ->
+                                Surface(
+                                    color = task.category.color.copy(alpha = 0.85f),
+                                    shape = RoundedCornerShape(3.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onEditTask(task) }
+                                ) {
+                                    Text(
+                                        text = task.title,
+                                        fontSize = 8.sp,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+                            if (dayTasks.size > 3) {
+                                Text(
+                                    text = "+${dayTasks.size - 3} more",
+                                    fontSize = 7.sp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -37,7 +37,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.time_scheduler.data.Category
-import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -49,10 +48,12 @@ fun CalendarHeader(
     onDateSelected: (LocalDate) -> Unit,
     selectedCategoryFilter: Category?,
     onCategoryFilterSelected: (Category?) -> Unit,
+    viewMode: CalendarViewMode,
+    onViewModeSelected: (CalendarViewMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
     // Generate current week dates centered around selected date or start of week
-    val startOfWeek = selectedDate.minusDays(selectedDate.dayOfWeek.value.toLong() - 1)
+    val startOfWeek = selectedDate.minusDays((selectedDate.dayOfWeek.value % 7).toLong())
     val weekDates = (0..6).map { startOfWeek.plusDays(it.toLong()) }
 
     Surface(
@@ -61,9 +62,9 @@ fun CalendarHeader(
         tonalElevation = 2.dp
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 12.dp)
+            modifier = Modifier.padding(vertical = 8.dp)
         ) {
-            // Month Header with Navigation
+            // Month Header with Navigation & View Mode Selector Toggle
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -90,79 +91,127 @@ fun CalendarHeader(
                     )
                 }
 
-                Row {
-                    IconButton(onClick = { onDateSelected(selectedDate.minusWeeks(1)) }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // View Mode Segmented Chips (Day, Week, Month)
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.padding(end = 4.dp)
+                    ) {
+                        Row(modifier = Modifier.padding(2.dp)) {
+                            CalendarViewMode.entries.forEach { mode ->
+                                val isSelected = viewMode == mode
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(
+                                            if (isSelected) MaterialTheme.colorScheme.primary
+                                            else Color.Transparent
+                                        )
+                                        .clickable { onViewModeSelected(mode) }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = mode.label,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Week/Month Navigation Arrows
+                    IconButton(onClick = {
+                        val prevDate = when (viewMode) {
+                            CalendarViewMode.DAY -> selectedDate.minusDays(1)
+                            CalendarViewMode.WEEK -> selectedDate.minusWeeks(1)
+                            CalendarViewMode.MONTH -> selectedDate.minusMonths(1)
+                        }
+                        onDateSelected(prevDate)
+                    }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                            contentDescription = "Previous Week"
+                            contentDescription = "Previous"
                         )
                     }
-                    IconButton(onClick = { onDateSelected(selectedDate.plusWeeks(1)) }) {
+                    IconButton(onClick = {
+                        val nextDate = when (viewMode) {
+                            CalendarViewMode.DAY -> selectedDate.plusDays(1)
+                            CalendarViewMode.WEEK -> selectedDate.plusWeeks(1)
+                            CalendarViewMode.MONTH -> selectedDate.plusMonths(1)
+                        }
+                        onDateSelected(nextDate)
+                    }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = "Next Week"
+                            contentDescription = "Next"
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            // Week Day Selector Strip (Shown for DAY and WEEK modes)
+            if (viewMode != CalendarViewMode.MONTH) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    weekDates.forEach { date ->
+                        val isSelected = date == selectedDate
+                        val isToday = date == LocalDate.now()
 
-            // Week Day Selector Strip
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.SpaceAround
-            ) {
-                weekDates.forEach { date ->
-                    val isSelected = date == selectedDate
-                    val isToday = date == LocalDate.now()
-
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(
-                                if (isSelected) MaterialTheme.colorScheme.primary
-                                else if (isToday) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                                else Color.Transparent
-                            )
-                            .clickable { onDateSelected(date) }
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
-                    ) {
-                        Text(
-                            text = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()).uppercase(),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Box(
-                            contentAlignment = Alignment.Center,
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
+                                .clip(RoundedCornerShape(16.dp))
                                 .background(
-                                    if (isToday && !isSelected) MaterialTheme.colorScheme.primary
+                                    if (isSelected) MaterialTheme.colorScheme.primary
+                                    else if (isToday) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
                                     else Color.Transparent
                                 )
+                                .clickable { onDateSelected(date) }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
                             Text(
-                                text = date.dayOfMonth.toString(),
-                                fontSize = 15.sp,
-                                fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal,
+                                text = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()).uppercase(),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
                                 color = if (isSelected) MaterialTheme.colorScheme.onPrimary
-                                else if (isToday) MaterialTheme.colorScheme.onPrimary
-                                else MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (isToday && !isSelected) MaterialTheme.colorScheme.primary
+                                        else Color.Transparent
+                                    )
+                            ) {
+                                Text(
+                                    text = date.dayOfMonth.toString(),
+                                    fontSize = 14.sp,
+                                    fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                                    else if (isToday) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Color-Coded Category Filter Pills
             LazyRow(
