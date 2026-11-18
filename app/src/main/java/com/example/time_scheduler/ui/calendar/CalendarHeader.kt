@@ -56,13 +56,18 @@ fun CalendarHeader(
     val startOfWeek = selectedDate.minusDays((selectedDate.dayOfWeek.value % 7).toLong())
     val weekDates = (0..6).map { startOfWeek.plusDays(it.toLong()) }
 
+    // Floating Header Card Container (Tonal Elevation = 3.dp, Rounded Corners = 16.dp)
     Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 3.dp,
+        shadowElevation = 1.dp
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 8.dp)
+            modifier = Modifier.padding(vertical = 10.dp)
         ) {
             // Month Header with Navigation & View Mode Selector Toggle
             Row(
@@ -92,7 +97,7 @@ fun CalendarHeader(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // View Mode Segmented Chips (Day, Week, Month)
+                    // Material 3 Segmented View Mode Toggle Chips (Day, Week, Month)
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         shape = RoundedCornerShape(12.dp),
@@ -110,7 +115,7 @@ fun CalendarHeader(
                                             else Color.Transparent
                                         )
                                         .clickable { onViewModeSelected(mode) }
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        .padding(horizontal = 10.dp, vertical = 5.dp)
                                 ) {
                                     Text(
                                         text = mode.label,
@@ -124,7 +129,7 @@ fun CalendarHeader(
                         }
                     }
 
-                    // Week/Month Navigation Arrows
+                    // Navigation Arrows
                     IconButton(onClick = {
                         val prevDate = when (viewMode) {
                             CalendarViewMode.DAY -> selectedDate.minusDays(1)
@@ -213,7 +218,7 @@ fun CalendarHeader(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Color-Coded Category Filter Pills
+            // Elevated Category Filter Pills with colored dots & translucent glows
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -223,7 +228,7 @@ fun CalendarHeader(
                     FilterChip(
                         selected = selectedCategoryFilter == null,
                         onClick = { onCategoryFilterSelected(null) },
-                        label = { Text("All Categories") },
+                        label = { Text("All Categories", fontWeight = FontWeight.Medium) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer
                         )
@@ -246,11 +251,12 @@ fun CalendarHeader(
                                         .background(category.color)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text(category.displayName)
+                                Text(category.displayName, fontWeight = FontWeight.Medium)
                             }
                         },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = category.color.copy(alpha = 0.25f)
+                            selectedContainerColor = category.color.copy(alpha = 0.25f),
+                            containerColor = category.color.copy(alpha = 0.08f)
                         )
                     )
                 }
