@@ -3,17 +3,21 @@ package com.example.time_scheduler.ui.calendar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
@@ -187,33 +191,49 @@ fun WeeklyGridView(
                                         .fillMaxWidth()
                                         .padding(horizontal = 1.dp)
                                         .offset { IntOffset(0, topDp.dp.toPx().roundToInt()) }
-                                        .height(heightDp.coerceAtLeast(24f).dp)
+                                        .height(heightDp.coerceAtLeast(26f).dp)
                                         .clickable { onEditTask(task) },
                                     colors = CardDefaults.cardColors(
-                                        containerColor = task.category.color.copy(alpha = 0.85f)
+                                        containerColor = task.category.color.copy(alpha = 0.2f)
                                     ),
-                                    shape = RoundedCornerShape(6.dp)
+                                    shape = RoundedCornerShape(8.dp)
                                 ) {
-                                    Column(
+                                    Row(
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .padding(3.dp)
+                                            .padding(1.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(
-                                            text = task.title,
-                                            color = Color.White,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 10.sp,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis
+                                        // Left Vertical Accent Bar (Matching user screenshot!)
+                                        Box(
+                                            modifier = Modifier
+                                                .width(3.dp)
+                                                .fillMaxHeight()
+                                                .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
+                                                .background(task.category.color)
                                         )
-                                        if (heightDp >= 40) {
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Column(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .padding(vertical = 2.dp)
+                                        ) {
                                             Text(
-                                                text = task.formattedTimeString,
-                                                color = Color.White.copy(alpha = 0.9f),
-                                                fontSize = 8.sp,
-                                                maxLines = 1
+                                                text = task.title,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 9.5.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
                                             )
+                                            if (heightDp >= 38) {
+                                                Text(
+                                                    text = task.formattedTimeString,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    fontSize = 8.sp,
+                                                    maxLines = 1
+                                                )
+                                            }
                                         }
                                     }
                                 }

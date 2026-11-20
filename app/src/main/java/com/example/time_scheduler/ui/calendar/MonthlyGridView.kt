@@ -1,8 +1,10 @@
 package com.example.time_scheduler.ui.calendar
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -125,28 +128,41 @@ fun MonthlyGridView(
 
                         Spacer(modifier = Modifier.height(2.dp))
 
-                        // Task Pills / Indicators
+                        // Task Pills / Indicators with Left Vertical Accent Bar
                         Column(
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             dayTasks.take(3).forEach { task ->
                                 Surface(
-                                    color = task.category.color.copy(alpha = 0.85f),
-                                    shape = RoundedCornerShape(3.dp),
+                                    color = task.category.color.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(4.dp),
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable { onEditTask(task) }
                                 ) {
-                                    Text(
-                                        text = task.title,
-                                        fontSize = 8.sp,
-                                        color = Color.White,
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp)
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Left Vertical Accent Bar (Matching user screenshot)
+                                        Box(
+                                            modifier = Modifier
+                                                .width(2.5.dp)
+                                                .height(14.dp)
+                                                .background(task.category.color)
+                                        )
+                                        Spacer(modifier = Modifier.width(2.dp))
+                                        Text(
+                                            text = task.title,
+                                            fontSize = 8.sp,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(vertical = 1.dp)
+                                        )
+                                    }
                                 }
                             }
                             if (dayTasks.size > 3) {
