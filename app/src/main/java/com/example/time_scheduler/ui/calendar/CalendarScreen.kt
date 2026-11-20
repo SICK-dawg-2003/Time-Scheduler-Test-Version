@@ -23,8 +23,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -91,50 +89,17 @@ fun CalendarScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         modifier = modifier.fillMaxSize(),
         floatingActionButton = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(end = 12.dp, bottom = 12.dp)
+            // Clean Single Add Task FAB (Matching Canva Mockup)
+            FloatingActionButton(
+                onClick = { isShowAddDialog = true },
+                shape = RoundedCornerShape(18.dp),
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier
+                    .padding(end = 12.dp, bottom = 12.dp)
+                    .size(56.dp)
             ) {
-                // Implicit Intent share button
-                FloatingActionButton(
-                    onClick = {
-                        val taskSummary = filteredTasks.joinToString("\n") { "- ${it.title} (${it.startTime} - ${it.endTime})" }
-                        val sendIntent = Intent().apply {
-                            action = Intent.ACTION_SEND
-                            putExtra(Intent.EXTRA_TEXT, "Schedule for $selectedDate:\n$taskSummary")
-                            type = "text/plain"
-                        }
-                        val shareIntent = Intent.createChooser(sendIntent, "Share Schedule")
-                        context.startActivity(shareIntent)
-                        Toast.makeText(context, "Opening share intent...", Toast.LENGTH_SHORT).show()
-                    },
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.padding(end = 8.dp)
-                ) {
-                    Icon(Icons.Default.Share, contentDescription = "Share Schedule (Intent)")
-                }
-
-                // Notification test button
-                FloatingActionButton(
-                    onClick = { isNotificationSheetOpen = true },
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                    modifier = Modifier.padding(end = 8.dp)
-                ) {
-                    Icon(Icons.Default.Notifications, contentDescription = "Notification Settings")
-                }
-
-                // Add Task FAB
-                FloatingActionButton(
-                    onClick = { isShowAddDialog = true },
-                    shape = RoundedCornerShape(18.dp),
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(56.dp)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Add Task", modifier = Modifier.size(28.dp))
-                }
+                Icon(Icons.Default.Add, contentDescription = "Add Task", modifier = Modifier.size(28.dp))
             }
         }
     ) { innerPadding ->
@@ -150,7 +115,7 @@ fun CalendarScreen(
                     .padding(innerPadding)
             }
         ) {
-            // Header Section (Fills full width)
+            // Header Section with Search, Share, Notification, and Theme Toggle Icons on Top Right
             CalendarHeader(
                 selectedDate = selectedDate,
                 onDateSelected = { viewModel.onDateSelected(it) },
@@ -161,7 +126,18 @@ fun CalendarScreen(
                 isDarkMode = isDarkMode,
                 onToggleDarkMode = onToggleDarkMode,
                 onSearchClick = { Toast.makeText(context, "Search schedule coming soon...", Toast.LENGTH_SHORT).show() },
-                onNotificationClick = { isNotificationSheetOpen = true }
+                onNotificationClick = { isNotificationSheetOpen = true },
+                onShareClick = {
+                    val taskSummary = filteredTasks.joinToString("\n") { "- ${it.title} (${it.startTime} - ${it.endTime})" }
+                    val sendIntent = Intent().apply {
+                        action = Intent.ACTION_SEND
+                        putExtra(Intent.EXTRA_TEXT, "Schedule for $selectedDate:\n$taskSummary")
+                        type = "text/plain"
+                    }
+                    val shareIntent = Intent.createChooser(sendIntent, "Share Schedule")
+                    context.startActivity(shareIntent)
+                    Toast.makeText(context, "Opening share intent...", Toast.LENGTH_SHORT).show()
+                }
             )
 
             // Date Subheader Row ("Thursday, November 19" & "Today" Badge)
