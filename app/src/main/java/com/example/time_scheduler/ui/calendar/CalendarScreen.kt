@@ -266,7 +266,8 @@ fun CalendarScreen(
                                 selectedDate = selectedDate,
                                 tasks = categoryFilteredAllTasks,
                                 onDateSelected = { viewModel.onDateSelected(it) },
-                                onEditTask = { taskToEdit = it }
+                                onEditTask = { taskToEdit = it },
+                                onTaskReassigned = { viewModel.updateTask(it) }
                             )
                         }
 

@@ -3,7 +3,7 @@ package com.example.time_scheduler.ui.calendar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,10 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
@@ -27,11 +25,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -53,9 +56,11 @@ fun WeeklyGridView(
     tasks: List<TaskItem>,
     onDateSelected: (LocalDate) -> Unit,
     onEditTask: (TaskItem) -> Unit,
+    onTaskReassigned: (TaskItem) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
+    val density = LocalDensity.current
     val hourFormatter = remember { DateTimeFormatter.ofPattern("h a") }
 
     // Start week on Sunday or Monday
@@ -161,7 +166,7 @@ fun WeeklyGridView(
                 }
             }
 
-            // 7 Columns Grid Content Layer
+            // 7 Columns Grid Content Layer with Drag and Drop Reassignment across Days
             Row(
                 modifier = Modifier
                     .fillMaxSize()
@@ -186,12 +191,53 @@ fun WeeklyGridView(
                             val heightDp = (durationMinutes.toFloat() / 60f) * HOUR_ROW_HEIGHT_DP
 
                             if (topDp >= 0) {
+                                var offsetXPx by remember { mutableFloatStateOf(0f) }
+                                var offsetYPx by remember { mutableFloatStateOf(0f) }
+
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 1.dp)
-                                        .offset { IntOffset(0, topDp.dp.toPx().roundToInt()) }
+                                        .offset { IntOffset(offsetXPx.roundToInt(), (topDp.dp.toPx() + offsetYPx).roundToInt()) }
                                         .height(heightDp.coerceAtLeast(26f).dp)
+                                        .pointerInput(task) {
+                                            detectDragGestures(
+                                                onDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    offsetXPx += dragAmount.x
+                                                    offsetYPx += dragAmount.y
+                                                },
+                                                onDragEnd = {
+                                                    // Calculate Day Column shift based on X offset
+                                                    val colWidthPx = size.width.toFloat()
+                                                    val colShift = if (colWidthPx > 0) (offsetXPx / colWidthPx).roundToInt() else 0
+                                                    val targetDate = colDate.plusDays(colShift.toLong())
+
+                                                    // Calculate Time shift based on Y offset
+                                                    val hourHeightPx = with(density) { HOUR_ROW_HEIGHT_DP.dp.toPx() }
+                                                    val hourDelta = offsetYPx / hourHeightPx
+                                                    val minutesDelta = (hourDelta * 60).roundToInt()
+                                                    var newStartTime = task.startTime.plusMinutes(minutesDelta.toLong())
+
+                                                    if (newStartTime.isBefore(LocalTime.of(0, 0))) {
+                                                        newStartTime = LocalTime.of(0, 0)
+                                                    }
+
+                                                    val durationMins = task.durationMinutes.toLong()
+                                                    val newEndTime = newStartTime.plusMinutes(if (durationMins > 0) durationMins else 60L)
+
+                                                    val updatedTask = task.copy(
+                                                        date = targetDate,
+                                                        startTime = newStartTime,
+                                                        endTime = newEndTime
+                                                    )
+
+                                                    onTaskReassigned(updatedTask)
+                                                    offsetXPx = 0f
+                                                    offsetYPx = 0f
+                                                }
+                                            )
+                                        }
                                         .clickable { onEditTask(task) },
                                     colors = CardDefaults.cardColors(
                                         containerColor = task.category.color.copy(alpha = 0.2f)
@@ -204,7 +250,7 @@ fun WeeklyGridView(
                                             .padding(1.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        // Left Vertical Accent Bar (Matching user screenshot!)
+                                        // Left Vertical Accent Bar
                                         Box(
                                             modifier = Modifier
                                                 .width(3.dp)
