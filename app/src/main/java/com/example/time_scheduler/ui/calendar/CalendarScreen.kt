@@ -71,6 +71,7 @@ fun CalendarScreen(
     var currentViewMode by remember { mutableStateOf(CalendarViewMode.DAY) }
     var taskToEdit by remember { mutableStateOf<TaskItem?>(null) }
     var isShowAddDialog by remember { mutableStateOf(false) }
+    var isNotificationSheetOpen by remember { mutableStateOf(false) }
 
     val mainScrollState = rememberScrollState()
 
@@ -116,19 +117,12 @@ fun CalendarScreen(
 
                 // Notification test button
                 FloatingActionButton(
-                    onClick = {
-                        NotificationHelper.showReminderNotification(
-                            context,
-                            "Time Scheduler Reminder",
-                            "You have ${filteredTasks.size} tasks scheduled for today."
-                        )
-                        Toast.makeText(context, "Notification sent!", Toast.LENGTH_SHORT).show()
-                    },
+                    onClick = { isNotificationSheetOpen = true },
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                     modifier = Modifier.padding(end = 8.dp)
                 ) {
-                    Icon(Icons.Default.Notifications, contentDescription = "Test Notification")
+                    Icon(Icons.Default.Notifications, contentDescription = "Notification Settings")
                 }
 
                 // Add Task FAB
@@ -167,14 +161,7 @@ fun CalendarScreen(
                 isDarkMode = isDarkMode,
                 onToggleDarkMode = onToggleDarkMode,
                 onSearchClick = { Toast.makeText(context, "Search schedule coming soon...", Toast.LENGTH_SHORT).show() },
-                onNotificationClick = {
-                    NotificationHelper.showReminderNotification(
-                        context,
-                        "Time Scheduler Reminder",
-                        "You have ${filteredTasks.size} tasks scheduled for today."
-                    )
-                    Toast.makeText(context, "Notification sent!", Toast.LENGTH_SHORT).show()
-                }
+                onNotificationClick = { isNotificationSheetOpen = true }
             )
 
             // Date Subheader Row ("Thursday, November 19" & "Today" Badge)
@@ -352,6 +339,14 @@ fun CalendarScreen(
                     taskToEdit = null
                     Toast.makeText(context, "Task '${updatedTask.title}' updated successfully!", Toast.LENGTH_SHORT).show()
                 }
+            )
+        }
+
+        // Notification Settings Bottom Sheet
+        if (isNotificationSheetOpen) {
+            NotificationSettingsSheet(
+                tasks = filteredTasks,
+                onDismiss = { isNotificationSheetOpen = false }
             )
         }
     }
