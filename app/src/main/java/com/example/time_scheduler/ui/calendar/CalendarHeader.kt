@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -59,7 +58,6 @@ fun CalendarHeader(
     onViewModeSelected: (CalendarViewMode) -> Unit,
     isDarkMode: Boolean = false,
     onToggleDarkMode: () -> Unit = {},
-    onSearchClick: () -> Unit = {},
     onNotificationClick: () -> Unit = {},
     onShareClick: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -86,7 +84,7 @@ fun CalendarHeader(
         Column(
             modifier = Modifier.padding(vertical = if (isLandscape) 6.dp else 10.dp)
         ) {
-            // 1. Top Bar: Calendar Title & Action Icons (Search, Share, Notifications, Theme Toggle)
+            // 1. Top Bar: Calendar Title & Action Icons (Share, Notifications, Theme Toggle)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -108,14 +106,6 @@ fun CalendarHeader(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    IconButton(onClick = onSearchClick, modifier = Modifier.size(32.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Search",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
                     IconButton(onClick = onShareClick, modifier = Modifier.size(32.dp)) {
                         Icon(
                             imageVector = Icons.Default.Share,

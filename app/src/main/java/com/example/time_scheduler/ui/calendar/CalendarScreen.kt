@@ -89,7 +89,7 @@ fun CalendarScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         modifier = modifier.fillMaxSize(),
         floatingActionButton = {
-            // Clean Single Add Task FAB (Matching Canva Mockup)
+            // Clean Single Add Task FAB
             FloatingActionButton(
                 onClick = { isShowAddDialog = true },
                 shape = RoundedCornerShape(18.dp),
@@ -115,7 +115,7 @@ fun CalendarScreen(
                     .padding(innerPadding)
             }
         ) {
-            // Header Section with Search, Share, Notification, and Theme Toggle Icons on Top Right
+            // Header Section with Share, Notification, and Theme Toggle Icons on Top Right
             CalendarHeader(
                 selectedDate = selectedDate,
                 onDateSelected = { viewModel.onDateSelected(it) },
@@ -125,7 +125,6 @@ fun CalendarScreen(
                 onViewModeSelected = { currentViewMode = it },
                 isDarkMode = isDarkMode,
                 onToggleDarkMode = onToggleDarkMode,
-                onSearchClick = { Toast.makeText(context, "Search schedule coming soon...", Toast.LENGTH_SHORT).show() },
                 onNotificationClick = { isNotificationSheetOpen = true },
                 onShareClick = {
                     val taskSummary = filteredTasks.joinToString("\n") { "- ${it.title} (${it.startTime} - ${it.endTime})" }
