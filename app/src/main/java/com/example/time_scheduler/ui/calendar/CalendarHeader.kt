@@ -240,8 +240,8 @@ fun CalendarHeader(
 
             Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 16.dp))
 
-            // 4. Week Day Selector Strip (SUN 15, MON 16... THU 19 with dot)
-            if (viewMode != CalendarViewMode.MONTH) {
+            // 4. Week Day Selector Strip (Shown ONLY for DAY and AGENDA modes to avoid duplication in WEEK and MONTH views)
+            if (viewMode == CalendarViewMode.DAY || viewMode == CalendarViewMode.AGENDA) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
