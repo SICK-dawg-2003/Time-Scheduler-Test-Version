@@ -11,7 +11,7 @@ import java.util.Locale
 class ScheduleTextParser {
 
     /**
-     * Time-Anchor Row Span Spatial Parser.
+     * Ultra-resilient Time-Anchor Row Span Spatial Parser.
      * Uses recognized time ranges as vertical row anchors to assign Activity Titles and Notes/Descriptions
      * to their exact rows with 100% mathematical precision regardless of ML Kit block groupings.
      */
@@ -25,13 +25,13 @@ class ScheduleTextParser {
         }
 
         // Noise header filter
-        val headerNoise = setOf("time", "activity", "note", "notes", "daily schedule", "schedule", "timetable", "hours")
+        val headerNoise = setOf("time", "activity", "note", "notes", "daily schedule", "schedule", "timetable", "hours", "subject", "room")
         val validLines = allLines.filterNot { line ->
             headerNoise.contains(line.text.lowercase().replace(Regex("""[^a-z\s]"""), "").trim())
         }
 
         val timeRangeRegex = Regex(
-            """(?i)(\b\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)\s*-\s*(\b\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)""",
+            """(?i)(\b\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)\s*(?:[-–—~#/|]|to|till|until)\s*(\b\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)""",
             RegexOption.IGNORE_CASE
         )
 
@@ -69,7 +69,7 @@ class ScheduleTextParser {
             return parseScannedText(visionText.text, targetDate)
         }
 
-        // 2. Define row Y-spans for each time anchor
+        // 2. Define row Y-spans for each time anchor with expanded Y-span tolerance
         val parsedTasks = mutableListOf<TaskItem>()
         var lastTrackedTime: LocalTime? = null
 
@@ -85,11 +85,11 @@ class ScheduleTextParser {
 
         for (idx in sortedAnchors.indices) {
             val anchor = sortedAnchors[idx]
-            val rowTop = anchor.top - (avgRowHeight * 0.25).toInt()
+            val rowTop = anchor.top - (avgRowHeight * 0.35).toInt()
             val rowBottom = if (idx + 1 < sortedAnchors.size) {
-                sortedAnchors[idx + 1].top - 5
+                sortedAnchors[idx + 1].top - 2
             } else {
-                anchor.bottom + (avgRowHeight * 0.75).toInt()
+                anchor.bottom + (avgRowHeight * 0.85).toInt()
             }
 
             // Find all non-time lines whose Y-center falls inside this row Y-span
@@ -152,14 +152,14 @@ class ScheduleTextParser {
     fun parseScannedText(rawText: String, targetDate: LocalDate = LocalDate.now()): List<TaskItem> {
         val rawLines = rawText.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
         
-        val headerNoise = setOf("time", "activity", "note", "notes", "daily schedule", "schedule", "timetable", "hours")
+        val headerNoise = setOf("time", "activity", "note", "notes", "daily schedule", "schedule", "timetable", "hours", "subject")
         val lines = rawLines.filterNot { line ->
             headerNoise.contains(line.lowercase().replace(Regex("""[^a-z\s]"""), "").trim())
         }
 
         val parsedTasks = mutableListOf<TaskItem>()
         val timeRangeRegex = Regex(
-            """(?i)(\b\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)\s*-\s*(\b\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)""",
+            """(?i)(\b\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)\s*(?:[-–—~#/|]|to|till|until)\s*(\b\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)""",
             RegexOption.IGNORE_CASE
         )
         val singleTimeRegex = Regex(
@@ -304,20 +304,27 @@ class ScheduleTextParser {
     }
 
     /**
-     * Sanitizes common OCR typos and normalizes time strings.
-     * Examples: "7.00" -> "7:00", "I0:00 -11:00" -> "10:00 - 11:00", "5:00-7:00" -> "5:00 - 7:00"
+     * Ultra-flexible OCR Time Sanitizer.
+     * Fixes OCR digit typos ("I0:00" -> "10:00", "7.00" -> "7:00", "10am-11am" -> "10:00 AM - 11:00 AM").
      */
     private fun sanitizeOcrTimeText(rawText: String): String {
         var text = rawText
         
-        // Replace digit misreadings: "I0:00" -> "10:00", "l2:00" -> "12:00", "7:OO" -> "7:00"
+        // Replace digit misreadings: "I0:00" -> "10:00", "l2:00" -> "12:00", "7:OO" -> "7:00", "S:00" -> "5:00"
         text = text.replace(Regex("""\bI(\d)"""), "1$1")
             .replace(Regex("""\bl(\d)"""), "1$1")
             .replace(Regex("""(\d)[O|o](\d)"""), "$10$2")
             .replace(Regex("""(\d)[O|o]\b"""), "$10")
+            .replace(Regex("""\bS:(\d{2})"""), "5:$1")
+            .replace(Regex("""\bZ:(\d{2})"""), "2:$1")
 
-        // Normalize time colons: "7.00" -> "7:00", "10;00" -> "10:00"
+        // Normalize time colons: "7.00" -> "7:00", "10;00" -> "10:00", "10 00" -> "10:00"
         text = text.replace(Regex("""(\d{1,2})[.;'](\d{2})"""), "$1:$2")
+            .replace(Regex("""(\d{1,2})\s+(\d{2})\s*(AM|PM|am|pm)\b"""), "$1:$2 $3")
+
+        // Format short AM/PM times: "10am" -> "10:00 AM", "9pm" -> "9:00 PM"
+        text = text.replace(Regex("""\b(\d{1,2})\s*(am|AM)\b"""), "$1:00 AM")
+            .replace(Regex("""\b(\d{1,2})\s*(pm|PM)\b"""), "$1:00 PM")
 
         // Normalize dashes/hyphens and range separators
         text = text.replace(Regex("""\s*[-–—~#/|]|(?:\s+to\s+|\s+till\s+|\s+until\s+)\s*"""), " - ")
