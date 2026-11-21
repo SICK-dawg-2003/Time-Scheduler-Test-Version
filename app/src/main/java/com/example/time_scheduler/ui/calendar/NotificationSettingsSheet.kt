@@ -1,8 +1,8 @@
 package com.example.time_scheduler.ui.calendar
 
+import android.media.RingtoneManager
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -25,15 +26,16 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -44,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.time_scheduler.data.TaskItem
+import com.example.time_scheduler.util.AlarmSoundType
 import com.example.time_scheduler.util.NotificationHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -54,7 +57,9 @@ fun NotificationSettingsSheet(
 ) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState()
+
     var selectedLeadTimeMinutes by remember { mutableIntStateOf(15) }
+    var selectedSoundType by remember { mutableStateOf(AlarmSoundType.NOTIFICATION) }
 
     val leadTimeOptions = listOf(
         5 to "5 mins before",
@@ -133,22 +138,71 @@ fun NotificationSettingsSheet(
                 }
             }
 
+            // Alarm Sound Type Selector & Audio Preview Button
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Alarm Sound Type:",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    IconButton(
+                        onClick = {
+                            val soundUri = RingtoneManager.getDefaultUri(selectedSoundType.ringtoneType)
+                            val ringtone = RingtoneManager.getRingtone(context, soundUri)
+                            ringtone.play()
+                            Toast.makeText(context, "Playing preview: ${selectedSoundType.displayName}", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                            contentDescription = "Preview Sound",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    AlarmSoundType.entries.forEach { soundType ->
+                        val isSelected = selectedSoundType == soundType
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { selectedSoundType = soundType },
+                            label = { Text(soundType.displayName, fontSize = 10.5.sp, fontWeight = FontWeight.Medium) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer
+                            )
+                        )
+                    }
+                }
+            }
+
             // Schedule All Alarms Primary Button
             Button(
                 onClick = {
                     var scheduledCount = 0
                     tasks.forEach { task ->
-                        val isScheduled = NotificationHelper.scheduleTaskAlarm(
-                            context = context,
-                            task = task,
-                            leadTimeMinutes = selectedLeadTimeMinutes
-                        )
-                        if (isScheduled) scheduledCount++
+                        val updatedTask = task.copy(leadTimeMinutes = selectedLeadTimeMinutes)
+                        val count = NotificationHelper.scheduleTaskDualAlarms(context, updatedTask, soundType = selectedSoundType)
+                        if (count > 0) scheduledCount += count
                     }
                     if (scheduledCount > 0) {
                         Toast.makeText(
                             context,
-                            "Scheduled $scheduledCount background task alarms ($selectedLeadTimeMinutes mins lead time)!",
+                            "Scheduled $scheduledCount background alarms with ${selectedSoundType.displayName}!",
                             Toast.LENGTH_LONG
                         ).show()
                     } else {
@@ -167,7 +221,7 @@ fun NotificationSettingsSheet(
                 Icon(Icons.Default.Alarm, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Schedule Background Alarms (${tasks.size} Tasks)",
+                    text = "Schedule Dual Alarms (${tasks.size} Tasks)",
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -176,18 +230,19 @@ fun NotificationSettingsSheet(
             OutlinedButton(
                 onClick = {
                     NotificationHelper.showReminderNotification(
-                        context,
-                        "Time Scheduler Test Notification",
-                        "You have ${tasks.size} scheduled tasks for today."
+                        context = context,
+                        title = "Time Scheduler Test Notification",
+                        message = "Testing alarm sound: ${selectedSoundType.displayName}",
+                        soundType = selectedSoundType
                     )
-                    Toast.makeText(context, "Instant test notification sent!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Test notification sent with ${selectedSoundType.displayName}!", Toast.LENGTH_SHORT).show()
                 },
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Send Instant Test Notification")
+                Text("Send Test Notification (${selectedSoundType.displayName})")
             }
 
             Spacer(modifier = Modifier.height(16.dp))
