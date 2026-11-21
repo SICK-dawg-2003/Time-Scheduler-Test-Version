@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
@@ -41,6 +42,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +61,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.time_scheduler.data.TaskItem
 import com.example.time_scheduler.domain.ScheduleConflict
+import kotlinx.coroutines.delay
+import java.time.Duration
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
@@ -77,6 +81,24 @@ fun DailyTimelineView(
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
+    val density = LocalDensity.current
+
+    // Live Ticker tracking current time
+    var currentTime by remember { mutableStateOf(LocalTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTime = LocalTime.now()
+            delay(10000L) // Update every 10 seconds
+        }
+    }
+
+    // Active task currently running right now
+    val activeTask = remember(tasks, currentTime) {
+        tasks.find { task ->
+            !task.isCompleted &&
+            (currentTime.isAfter(task.startTime.minusSeconds(1)) && currentTime.isBefore(task.endTime))
+        }
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         // Discrepancy Conflict Alert Banner
@@ -85,13 +107,13 @@ fun DailyTimelineView(
                 color = MaterialTheme.colorScheme.errorContainer,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(8.dp),
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(12.dp),
+                        .padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -126,6 +148,66 @@ fun DailyTimelineView(
                         modifier = Modifier.padding(start = 8.dp)
                     ) {
                         Text("Auto-Resolve", fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+
+        // Live Active Task Banner Card
+        activeTask?.let { task ->
+            val remainingMinutes = Duration.between(currentTime, task.endTime).toMinutes().coerceAtLeast(0)
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                    .clickable { onEditTask(task) }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF4CAF50))
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "NOW ACTIVE: ${task.title}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = "${task.formattedTimeString} • $remainingMinutes mins remaining",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+
+                    Surface(
+                        color = task.category.color.copy(alpha = 0.25f),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = task.category.displayName,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
                     }
                 }
             }
@@ -171,6 +253,34 @@ fun DailyTimelineView(
                             )
                         }
                     }
+                }
+            }
+
+            // Live Red Current Time Horizontal Line Indicator
+            val currentHourOffset = currentTime.hour + (currentTime.minute / 60f)
+            val currentTopPx = currentHourOffset * with(density) { HOUR_HEIGHT_DP.dp.toPx() }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset { IntOffset(0, currentTopPx.roundToInt()) }
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .padding(start = 60.dp)
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(Color.Red)
+                    )
+                    HorizontalDivider(
+                        color = Color.Red,
+                        thickness = 2.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
 
