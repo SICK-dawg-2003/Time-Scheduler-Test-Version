@@ -13,3 +13,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Ignore binary APK output files
+*.apk
+UniSync_TimeScheduler.apk
