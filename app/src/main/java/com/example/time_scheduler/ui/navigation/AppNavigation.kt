@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -37,12 +37,14 @@ enum class AppDestination(
     val icon: ImageVector
 ) {
     CALENDAR("calendar", "Calendar", Icons.Default.CalendarMonth),
-    SCANNER("scanner", "Scanner", Icons.Default.CameraAlt)
+    SCANNER("scanner", "Scanner", Icons.Default.CropFree)
 }
 
 @Composable
 fun MainAppNavigation(
     viewModel: ScheduleViewModel = viewModel(),
+    isDarkMode: Boolean = false,
+    onToggleDarkMode: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var currentDestination by remember { mutableStateOf(AppDestination.CALENDAR) }
@@ -81,7 +83,11 @@ fun MainAppNavigation(
                         .fillMaxHeight()
                 ) {
                     when (currentDestination) {
-                        AppDestination.CALENDAR -> CalendarScreen(viewModel = viewModel)
+                        AppDestination.CALENDAR -> CalendarScreen(
+                            viewModel = viewModel,
+                            isDarkMode = isDarkMode,
+                            onToggleDarkMode = onToggleDarkMode
+                        )
                         AppDestination.SCANNER -> CameraScanScreen(viewModel = viewModel)
                     }
                 }
@@ -115,7 +121,11 @@ fun MainAppNavigation(
                         .padding(innerPadding)
                 ) {
                     when (currentDestination) {
-                        AppDestination.CALENDAR -> CalendarScreen(viewModel = viewModel)
+                        AppDestination.CALENDAR -> CalendarScreen(
+                            viewModel = viewModel,
+                            isDarkMode = isDarkMode,
+                            onToggleDarkMode = onToggleDarkMode
+                        )
                         AppDestination.SCANNER -> CameraScanScreen(viewModel = viewModel)
                     }
                 }

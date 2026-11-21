@@ -1,8 +1,13 @@
 package com.example.time_scheduler.ui.calendar
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +35,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.example.time_scheduler.data.TaskItem
 import com.example.time_scheduler.ui.ScheduleViewModel
 import com.example.time_scheduler.util.NotificationHelper
@@ -72,6 +79,23 @@ fun CalendarScreen(
     var isNotificationSheetOpen by remember { mutableStateOf(false) }
 
     val mainScrollState = rememberScrollState()
+
+    // Dynamic Runtime Permission Launcher for System Notifications (Android 13+ / API 33+)
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            Toast.makeText(context, "Notification permission granted!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
 
     // Filter tasks by selected date and optional category filter for single day
     val filteredTasks = remember(allTasks, selectedDate, categoryFilter) {
@@ -233,12 +257,21 @@ fun CalendarScreen(
                             tasks = filteredTasks,
                             conflicts = conflicts,
                             onToggleTaskCompletion = { viewModel.toggleTaskCompletion(it) },
-                            onDropTask = { viewModel.dropTask(it) },
+                            onDropTask = {
+                                NotificationHelper.cancelTaskAlarms(context, it)
+                                viewModel.dropTask(it)
+                            },
                             onEditTask = { taskToEdit = it },
-                            onTaskDragged = { task, newTime -> viewModel.onTaskDragged(task, newTime) },
+                            onTaskDragged = { task, newTime ->
+                                val updated = task.copy(startTime = newTime)
+                                viewModel.onTaskDragged(task, newTime)
+                                NotificationHelper.scheduleTaskDualAlarms(context, updated)
+                            },
                             onAutoResolveConflicts = {
                                 conflicts.firstOrNull()?.let { conflict ->
+                                    val updated = conflict.taskB.copy(startTime = conflict.taskA.endTime.plusMinutes(15))
                                     viewModel.onTaskDragged(conflict.taskB, conflict.taskA.endTime.plusMinutes(15))
+                                    NotificationHelper.scheduleTaskDualAlarms(context, updated)
                                 }
                             }
                         )
@@ -250,12 +283,21 @@ fun CalendarScreen(
                                 tasks = filteredTasks,
                                 conflicts = conflicts,
                                 onToggleTaskCompletion = { viewModel.toggleTaskCompletion(it) },
-                                onDropTask = { viewModel.dropTask(it) },
+                                onDropTask = {
+                                    NotificationHelper.cancelTaskAlarms(context, it)
+                                    viewModel.dropTask(it)
+                                },
                                 onEditTask = { taskToEdit = it },
-                                onTaskDragged = { task, newTime -> viewModel.onTaskDragged(task, newTime) },
+                                onTaskDragged = { task, newTime ->
+                                    val updated = task.copy(startTime = newTime)
+                                    viewModel.onTaskDragged(task, newTime)
+                                    NotificationHelper.scheduleTaskDualAlarms(context, updated)
+                                },
                                 onAutoResolveConflicts = {
                                     conflicts.firstOrNull()?.let { conflict ->
+                                        val updated = conflict.taskB.copy(startTime = conflict.taskA.endTime.plusMinutes(15))
                                         viewModel.onTaskDragged(conflict.taskB, conflict.taskA.endTime.plusMinutes(15))
+                                        NotificationHelper.scheduleTaskDualAlarms(context, updated)
                                     }
                                 }
                             )
@@ -267,7 +309,10 @@ fun CalendarScreen(
                                 tasks = categoryFilteredAllTasks,
                                 onDateSelected = { viewModel.onDateSelected(it) },
                                 onEditTask = { taskToEdit = it },
-                                onTaskReassigned = { viewModel.updateTask(it) }
+                                onTaskReassigned = { updatedTask ->
+                                    viewModel.updateTask(updatedTask)
+                                    NotificationHelper.scheduleTaskDualAlarms(context, updatedTask)
+                                }
                             )
                         }
 
@@ -298,8 +343,9 @@ fun CalendarScreen(
                 onDismiss = { isShowAddDialog = false },
                 onSaveTask = { newTask ->
                     viewModel.addTask(newTask)
+                    val count = NotificationHelper.scheduleTaskDualAlarms(context, newTask)
                     isShowAddDialog = false
-                    Toast.makeText(context, "Task '${newTask.title}' added successfully!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Task '${newTask.title}' scheduled ($count alarms set)!", Toast.LENGTH_SHORT).show()
                 }
             )
         }
@@ -312,8 +358,9 @@ fun CalendarScreen(
                 onDismiss = { taskToEdit = null },
                 onSaveTask = { updatedTask ->
                     viewModel.updateTask(updatedTask)
+                    val count = NotificationHelper.scheduleTaskDualAlarms(context, updatedTask)
                     taskToEdit = null
-                    Toast.makeText(context, "Task '${updatedTask.title}' updated successfully!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Task '${updatedTask.title}' updated ($count alarms set)!", Toast.LENGTH_SHORT).show()
                 }
             )
         }

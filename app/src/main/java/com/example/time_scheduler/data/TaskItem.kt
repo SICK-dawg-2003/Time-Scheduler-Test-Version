@@ -17,7 +17,8 @@ data class TaskItem(
     val isCompleted: Boolean = false,
     val isSyncedGoogle: Boolean = false,
     val isSyncedOutlook: Boolean = false,
-    val bufferMinutes: Int = 15
+    val bufferMinutes: Int = 15,
+    val leadTimeMinutes: Int = 15
 ) {
     val formattedTimeString: String
         get() {

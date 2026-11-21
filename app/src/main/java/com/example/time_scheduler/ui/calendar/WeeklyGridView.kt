@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,8 +15,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
@@ -25,8 +28,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -41,6 +46,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.time_scheduler.data.TaskItem
+import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -62,6 +68,15 @@ fun WeeklyGridView(
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
     val hourFormatter = remember { DateTimeFormatter.ofPattern("h a") }
+
+    // Live Ticker tracking current time
+    var currentTime by remember { mutableStateOf(LocalTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTime = LocalTime.now()
+            delay(10000L) // Update ticker every 10 seconds
+        }
+    }
 
     // Start week on Sunday or Monday
     val startOfWeek = remember(selectedDate) {
@@ -124,16 +139,20 @@ fun WeeklyGridView(
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-        // 7-Day Grid Scroll Area (6:00 AM through 11:00 PM)
-        Box(
+        // 7-Day Grid Scroll Area (Full 24 Hours: 12:00 AM through 11:00 PM)
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
                 .padding(bottom = 80.dp)
         ) {
-            // Background Hour Grid Lines & Time Sidebar
+            val totalGridWidthDp = (maxWidth - 50.dp).coerceAtLeast(100.dp)
+            val singleColWidthPx = with(density) { (totalGridWidthDp / 7f).toPx() }
+            val hourRowHeightPx = with(density) { HOUR_ROW_HEIGHT_DP.dp.toPx() }
+
+            // Background Hour Grid Lines & Time Sidebar (0:00 AM through 23:00 PM)
             Column(modifier = Modifier.fillMaxSize()) {
-                for (hour in 6..23) {
+                for (hour in 0..23) {
                     val hourLabel = LocalTime.of(hour, 0).format(hourFormatter)
                     Row(
                         modifier = Modifier
@@ -166,6 +185,34 @@ fun WeeklyGridView(
                 }
             }
 
+            // Live Red Current Time Horizontal Line Indicator across Weekly Grid
+            val currentHourOffset = currentTime.hour + (currentTime.minute / 60f)
+            val currentTopPx = currentHourOffset * hourRowHeightPx
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset { IntOffset(0, currentTopPx.roundToInt()) }
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .padding(start = 45.dp)
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(Color.Red)
+                    )
+                    HorizontalDivider(
+                        color = Color.Red,
+                        thickness = 2.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
             // 7 Columns Grid Content Layer with Drag and Drop Reassignment across Days
             Row(
                 modifier = Modifier
@@ -178,14 +225,14 @@ fun WeeklyGridView(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height((18 * HOUR_ROW_HEIGHT_DP).dp)
+                            .height((24 * HOUR_ROW_HEIGHT_DP).dp)
                             .border(
                                 width = 0.5.dp,
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
                             )
                     ) {
                         dayTasks.forEach { task ->
-                            val startMinuteOffset = (task.startTime.hour - 6) * 60 + task.startTime.minute
+                            val startMinuteOffset = task.startTime.hour * 60 + task.startTime.minute
                             val durationMinutes = (task.endTime.hour - task.startTime.hour) * 60 + (task.endTime.minute - task.startTime.minute)
                             val topDp = (startMinuteOffset.toFloat() / 60f) * HOUR_ROW_HEIGHT_DP
                             val heightDp = (durationMinutes.toFloat() / 60f) * HOUR_ROW_HEIGHT_DP
@@ -208,14 +255,12 @@ fun WeeklyGridView(
                                                     offsetYPx += dragAmount.y
                                                 },
                                                 onDragEnd = {
-                                                    // Calculate Day Column shift based on X offset
-                                                    val colWidthPx = size.width.toFloat()
-                                                    val colShift = if (colWidthPx > 0) (offsetXPx / colWidthPx).roundToInt() else 0
+                                                    // Calculate Day Column shift based on exact measured column width
+                                                    val colShift = if (singleColWidthPx > 0) (offsetXPx / singleColWidthPx).roundToInt() else 0
                                                     val targetDate = colDate.plusDays(colShift.toLong())
 
                                                     // Calculate Time shift based on Y offset
-                                                    val hourHeightPx = with(density) { HOUR_ROW_HEIGHT_DP.dp.toPx() }
-                                                    val hourDelta = offsetYPx / hourHeightPx
+                                                    val hourDelta = offsetYPx / hourRowHeightPx
                                                     val minutesDelta = (hourDelta * 60).roundToInt()
                                                     var newStartTime = task.startTime.plusMinutes(minutesDelta.toLong())
 
@@ -223,8 +268,8 @@ fun WeeklyGridView(
                                                         newStartTime = LocalTime.of(0, 0)
                                                     }
 
-                                                    val durationMins = task.durationMinutes.toLong()
-                                                    val newEndTime = newStartTime.plusMinutes(if (durationMins > 0) durationMins else 60L)
+                                                    val durationMins = if (task.durationMinutes > 0) task.durationMinutes.toLong() else 60L
+                                                    val newEndTime = newStartTime.plusMinutes(durationMins)
 
                                                     val updatedTask = task.copy(
                                                         date = targetDate,

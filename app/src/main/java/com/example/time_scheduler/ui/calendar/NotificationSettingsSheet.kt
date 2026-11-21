@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -111,7 +113,7 @@ fun NotificationSettingsSheet(
                 }
             }
 
-            // Lead Time Selector
+            // Lead Time Selector (LazyRow for 100% Consistent Horizontally-Scrollable Single Line Chips)
             Column {
                 Text(
                     text = "Reminder Lead Time:",
@@ -120,16 +122,16 @@ fun NotificationSettingsSheet(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(
+                LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    leadTimeOptions.forEach { (mins, label) ->
+                    items(leadTimeOptions) { (mins, label) ->
                         val isSelected = selectedLeadTimeMinutes == mins
                         FilterChip(
                             selected = isSelected,
                             onClick = { selectedLeadTimeMinutes = mins },
-                            label = { Text(label, fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+                            label = { Text(label, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
                             )
@@ -172,16 +174,16 @@ fun NotificationSettingsSheet(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                Row(
+                LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    AlarmSoundType.entries.forEach { soundType ->
+                    items(AlarmSoundType.entries.toTypedArray()) { soundType ->
                         val isSelected = selectedSoundType == soundType
                         FilterChip(
                             selected = isSelected,
                             onClick = { selectedSoundType = soundType },
-                            label = { Text(soundType.displayName, fontSize = 10.5.sp, fontWeight = FontWeight.Medium) },
+                            label = { Text(soundType.displayName, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer
                             )

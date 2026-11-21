@@ -184,7 +184,7 @@ fun DailyTimelineView(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "NOW ACTIVE: ${task.title}",
+                                text = "Current Schedule: ${task.title}",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
