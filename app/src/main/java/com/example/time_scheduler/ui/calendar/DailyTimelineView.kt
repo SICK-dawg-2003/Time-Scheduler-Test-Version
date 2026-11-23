@@ -1,6 +1,7 @@
 package com.example.time_scheduler.ui.calendar
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,7 +27,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
@@ -184,7 +185,7 @@ fun DailyTimelineView(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "Current Schedule: ${task.title}",
+                                text = "NOW ACTIVE: ${task.title}",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -220,7 +221,7 @@ fun DailyTimelineView(
                 .verticalScroll(scrollState)
                 .padding(bottom = 80.dp)
         ) {
-            // Background Hour Lines & Time Labels (12:00 AM through 11:00 PM)
+            // Background Tabular Matrix Cells for Timeline (12:00 AM through 11:00 PM)
             Column(modifier = Modifier.fillMaxSize()) {
                 val hourFormatter = DateTimeFormatter.ofPattern("h:mm a")
                 for (hour in 0..23) {
@@ -241,17 +242,19 @@ fun DailyTimelineView(
                                 .padding(start = 8.dp, top = 4.dp)
                         )
 
-                        Box(
+                        // Rounded Matrix Cell for this hour row
+                        Surface(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(HOUR_HEIGHT_DP.dp)
-                        ) {
-                            HorizontalDivider(
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                thickness = 1.dp,
-                                modifier = Modifier.align(Alignment.TopCenter)
+                                .fillMaxHeight()
+                                .padding(end = 12.dp, top = 2.dp, bottom = 2.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+                            border = BorderStroke(
+                                0.5.dp,
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f)
                             )
-                        }
+                        ) {}
                     }
                 }
             }
@@ -288,7 +291,7 @@ fun DailyTimelineView(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = 72.dp, end = 12.dp)
+                    .padding(start = 72.dp, end = 16.dp)
             ) {
                 tasks.forEach { task ->
                     TimelineTaskCard(
@@ -355,7 +358,7 @@ fun TimelineTaskCard(
                 )
             },
         colors = CardDefaults.cardColors(
-            containerColor = task.category.color.copy(alpha = 0.18f)
+            containerColor = task.category.color.copy(alpha = 0.22f)
         ),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)

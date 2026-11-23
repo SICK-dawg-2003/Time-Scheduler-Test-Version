@@ -1,9 +1,11 @@
 package com.example.time_scheduler.ui.calendar
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -139,7 +141,7 @@ fun WeeklyGridView(
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-        // 7-Day Grid Scroll Area (Full 24 Hours: 12:00 AM through 11:00 PM)
+        // 7-Day Tabular Cell Matrix Scroll Area (Full 24 Hours: 12:00 AM through 11:00 PM)
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
@@ -150,7 +152,7 @@ fun WeeklyGridView(
             val singleColWidthPx = with(density) { (totalGridWidthDp / 7f).toPx() }
             val hourRowHeightPx = with(density) { HOUR_ROW_HEIGHT_DP.dp.toPx() }
 
-            // Background Hour Grid Lines & Time Sidebar (0:00 AM through 23:00 PM)
+            // Background Tabular Matrix of Rounded Cell Cards matching design screenshots
             Column(modifier = Modifier.fillMaxSize()) {
                 for (hour in 0..23) {
                     val hourLabel = LocalTime.of(hour, 0).format(hourFormatter)
@@ -167,25 +169,37 @@ fun WeeklyGridView(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
                                 .width(50.dp)
-                                .padding(start = 6.dp, top = 2.dp)
+                                .padding(start = 6.dp, top = 4.dp)
                         )
 
-                        Box(
+                        // 7 Rounded Cell Card Matrix Blocks for this hour row
+                        Row(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(HOUR_ROW_HEIGHT_DP.dp)
+                                .padding(end = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
-                            HorizontalDivider(
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                                thickness = 1.dp,
-                                modifier = Modifier.align(Alignment.TopCenter)
-                            )
+                            for (dayIdx in 0..6) {
+                                Surface(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .padding(vertical = 1.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+                                    border = BorderStroke(
+                                        0.5.dp,
+                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f)
+                                    )
+                                ) {}
+                            }
                         }
                     }
                 }
             }
 
-            // Live Red Current Time Horizontal Line Indicator across Weekly Grid
+            // Live Red Current Time Horizontal Line Indicator across Weekly Matrix
             val currentHourOffset = currentTime.hour + (currentTime.minute / 60f)
             val currentTopPx = currentHourOffset * hourRowHeightPx
 
@@ -226,10 +240,6 @@ fun WeeklyGridView(
                         modifier = Modifier
                             .weight(1f)
                             .height((24 * HOUR_ROW_HEIGHT_DP).dp)
-                            .border(
-                                width = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
-                            )
                     ) {
                         dayTasks.forEach { task ->
                             val startMinuteOffset = task.startTime.hour * 60 + task.startTime.minute
@@ -255,11 +265,9 @@ fun WeeklyGridView(
                                                     offsetYPx += dragAmount.y
                                                 },
                                                 onDragEnd = {
-                                                    // Calculate Day Column shift based on exact measured column width
                                                     val colShift = if (singleColWidthPx > 0) (offsetXPx / singleColWidthPx).roundToInt() else 0
                                                     val targetDate = colDate.plusDays(colShift.toLong())
 
-                                                    // Calculate Time shift based on Y offset
                                                     val hourDelta = offsetYPx / hourRowHeightPx
                                                     val minutesDelta = (hourDelta * 60).roundToInt()
                                                     var newStartTime = task.startTime.plusMinutes(minutesDelta.toLong())
@@ -285,7 +293,7 @@ fun WeeklyGridView(
                                         }
                                         .clickable { onEditTask(task) },
                                     colors = CardDefaults.cardColors(
-                                        containerColor = task.category.color.copy(alpha = 0.2f)
+                                        containerColor = task.category.color.copy(alpha = 0.25f)
                                     ),
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
