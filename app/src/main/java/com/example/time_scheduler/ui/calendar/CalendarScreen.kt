@@ -28,23 +28,35 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarViewMonth
+import androidx.compose.material.icons.filled.ViewAgenda
+import androidx.compose.material.icons.filled.ViewDay
+import androidx.compose.material.icons.filled.ViewWeek
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -54,6 +66,7 @@ import androidx.core.content.ContextCompat
 import com.example.time_scheduler.data.TaskItem
 import com.example.time_scheduler.ui.ScheduleViewModel
 import com.example.time_scheduler.util.NotificationHelper
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -78,6 +91,8 @@ fun CalendarScreen(
     var isShowAddDialog by remember { mutableStateOf(false) }
     var isNotificationSheetOpen by remember { mutableStateOf(false) }
 
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val coroutineScope = rememberCoroutineScope()
     val mainScrollState = rememberScrollState()
 
     // Dynamic Runtime Permission Launcher for System Notifications (Android 13+ / API 33+)
@@ -109,176 +124,213 @@ fun CalendarScreen(
         if (categoryFilter == null) allTasks else allTasks.filter { it.category == categoryFilter }
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        modifier = modifier.fillMaxSize(),
-        floatingActionButton = {
-            // Clean Single Add Task FAB
-            FloatingActionButton(
-                onClick = { isShowAddDialog = true },
-                shape = RoundedCornerShape(18.dp),
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier
-                    .padding(end = 12.dp, bottom = 12.dp)
-                    .size(56.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Task", modifier = Modifier.size(28.dp))
-            }
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = if (isLandscape) {
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .verticalScroll(mainScrollState)
-            } else {
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            }
-        ) {
-            // Header Section with Share, Notification, and Theme Toggle Icons on Top Right
-            CalendarHeader(
-                selectedDate = selectedDate,
-                onDateSelected = { viewModel.onDateSelected(it) },
-                selectedCategoryFilter = categoryFilter,
-                onCategoryFilterSelected = { viewModel.onCategoryFilterSelected(it) },
-                viewMode = currentViewMode,
-                onViewModeSelected = { currentViewMode = it },
-                isDarkMode = isDarkMode,
-                onToggleDarkMode = onToggleDarkMode,
-                onNotificationClick = { isNotificationSheetOpen = true },
-                onShareClick = {
-                    val taskSummary = filteredTasks.joinToString("\n") { "- ${it.title} (${it.startTime} - ${it.endTime})" }
-                    val sendIntent = Intent().apply {
-                        action = Intent.ACTION_SEND
-                        putExtra(Intent.EXTRA_TEXT, "Schedule for $selectedDate:\n$taskSummary")
-                        type = "text/plain"
-                    }
-                    val shareIntent = Intent.createChooser(sendIntent, "Share Schedule")
-                    context.startActivity(shareIntent)
-                    Toast.makeText(context, "Opening share intent...", Toast.LENGTH_SHORT).show()
-                }
-            )
+    val sidepanelItems = listOf(
+        Triple(CalendarViewMode.AGENDA, "Agenda", Icons.Default.ViewAgenda),
+        Triple(CalendarViewMode.DAY, "Day", Icons.Default.ViewDay),
+        Triple(CalendarViewMode.WEEK, "Week", Icons.Default.ViewWeek),
+        Triple(CalendarViewMode.MONTH, "Month", Icons.Default.CalendarViewMonth)
+    )
 
-            // Date Subheader Row ("Thursday, November 19" & "Today" Badge)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        start = 16.dp,
-                        end = if (isLandscape) 36.dp else 16.dp,
-                        top = 6.dp,
-                        bottom = 6.dp
-                    ),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet(
+                drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.width(280.dp)
             ) {
-                Text(
-                    text = selectedDate.format(DateTimeFormatter.ofPattern("EEEE, MMMM d")),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.clickable { viewModel.onDateSelected(LocalDate.now()) }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
                 ) {
                     Text(
-                        text = "Today",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        text = "UniSync Schedule",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 12.dp, horizontal = 12.dp)
                     )
-                }
-            }
 
-            // Main Content Area (Timeline, Grid, or Empty State Card)
-            Box(
-                modifier = if (isLandscape) Modifier.height(550.dp) else Modifier.weight(1f)
-            ) {
-                if (filteredTasks.isEmpty() && (currentViewMode == CalendarViewMode.DAY || currentViewMode == CalendarViewMode.AGENDA)) {
-                    // Empty State Card ("No scheduled activities")
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp)
-                    ) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceContainerLow,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                // Left Purple Vertical Accent Bar
-                                Box(
-                                    modifier = Modifier
-                                        .width(4.dp)
-                                        .height(48.dp)
-                                        .clip(RoundedCornerShape(2.dp))
-                                        .background(MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    sidepanelItems.forEach { (mode, label, icon) ->
+                        val isSelected = currentViewMode == mode
+                        NavigationDrawerItem(
+                            label = {
+                                Text(
+                                    text = label,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                                 )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text(
-                                        text = "No scheduled activities",
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "Your day is currently clear.",
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "Add a task to start organizing your day.",
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Render Daily Timeline below empty state indicator
-                        DailyTimelineView(
-                            tasks = filteredTasks,
-                            conflicts = conflicts,
-                            onToggleTaskCompletion = { viewModel.toggleTaskCompletion(it) },
-                            onDropTask = {
-                                NotificationHelper.cancelTaskAlarms(context, it)
-                                viewModel.dropTask(it)
                             },
-                            onEditTask = { taskToEdit = it },
-                            onTaskDragged = { task, newTime ->
-                                val updated = task.copy(startTime = newTime)
-                                viewModel.onTaskDragged(task, newTime)
-                                NotificationHelper.scheduleTaskDualAlarms(context, updated)
+                            icon = {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = label,
+                                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             },
-                            onAutoResolveConflicts = {
-                                conflicts.firstOrNull()?.let { conflict ->
-                                    val updated = conflict.taskB.copy(startTime = conflict.taskA.endTime.plusMinutes(15))
-                                    viewModel.onTaskDragged(conflict.taskB, conflict.taskA.endTime.plusMinutes(15))
-                                    NotificationHelper.scheduleTaskDualAlarms(context, updated)
-                                }
-                            }
+                            selected = isSelected,
+                            onClick = {
+                                currentViewMode = mode
+                                coroutineScope.launch { drawerState.close() }
+                            },
+                            colors = NavigationDrawerItemDefaults.colors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.padding(vertical = 4.dp)
                         )
                     }
+                }
+            }
+        }
+    ) {
+        Scaffold(
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            modifier = modifier.fillMaxSize(),
+            floatingActionButton = {
+                // Clean Single Add Task FAB
+                FloatingActionButton(
+                    onClick = { isShowAddDialog = true },
+                    shape = RoundedCornerShape(18.dp),
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier
+                        .padding(end = 12.dp, bottom = 12.dp)
+                        .size(56.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add Task", modifier = Modifier.size(28.dp))
+                }
+            }
+        ) { innerPadding ->
+            Column(
+                modifier = if (isLandscape) {
+                    Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .verticalScroll(mainScrollState)
                 } else {
-                    when (currentViewMode) {
-                        CalendarViewMode.DAY -> {
+                    Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                }
+            ) {
+                // Header Section with Hamburger Menu Icon on Left
+                CalendarHeader(
+                    selectedDate = selectedDate,
+                    onDateSelected = { viewModel.onDateSelected(it) },
+                    selectedCategoryFilter = categoryFilter,
+                    onCategoryFilterSelected = { viewModel.onCategoryFilterSelected(it) },
+                    viewMode = currentViewMode,
+                    isDarkMode = isDarkMode,
+                    onToggleDarkMode = onToggleDarkMode,
+                    onNotificationClick = { isNotificationSheetOpen = true },
+                    onShareClick = {
+                        val taskSummary = filteredTasks.joinToString("\n") { "- ${it.title} (${it.startTime} - ${it.endTime})" }
+                        val sendIntent = Intent().apply {
+                            action = Intent.ACTION_SEND
+                            putExtra(Intent.EXTRA_TEXT, "Schedule for $selectedDate:\n$taskSummary")
+                            type = "text/plain"
+                        }
+                        val shareIntent = Intent.createChooser(sendIntent, "Share Schedule")
+                        context.startActivity(shareIntent)
+                        Toast.makeText(context, "Opening share intent...", Toast.LENGTH_SHORT).show()
+                    },
+                    onOpenDrawer = { coroutineScope.launch { drawerState.open() } }
+                )
+
+                // Date Subheader Row ("Thursday, November 19" & "Today" Badge)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = 16.dp,
+                            end = if (isLandscape) 36.dp else 16.dp,
+                            top = 6.dp,
+                            bottom = 6.dp
+                        ),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = selectedDate.format(DateTimeFormatter.ofPattern("EEEE, MMMM d")),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.clickable { viewModel.onDateSelected(LocalDate.now()) }
+                    ) {
+                        Text(
+                            text = "Today",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                // Main Content Area (Timeline, Grid, or Empty State Card)
+                Box(
+                    modifier = if (isLandscape) Modifier.height(550.dp) else Modifier.weight(1f)
+                ) {
+                    if (filteredTasks.isEmpty() && (currentViewMode == CalendarViewMode.DAY || currentViewMode == CalendarViewMode.AGENDA)) {
+                        // Empty State Card ("No scheduled activities")
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp)
+                        ) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    // Left Purple Vertical Accent Bar
+                                    Box(
+                                        modifier = Modifier
+                                            .width(4.dp)
+                                            .height(48.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(MaterialTheme.colorScheme.primary)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = "No scheduled activities",
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "Your day is currently clear.",
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Add a task to start organizing your day.",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Render Daily Timeline below empty state indicator
                             DailyTimelineView(
                                 tasks = filteredTasks,
                                 conflicts = conflicts,
@@ -302,34 +354,61 @@ fun CalendarScreen(
                                 }
                             )
                         }
+                    } else {
+                        when (currentViewMode) {
+                            CalendarViewMode.DAY -> {
+                                DailyTimelineView(
+                                    tasks = filteredTasks,
+                                    conflicts = conflicts,
+                                    onToggleTaskCompletion = { viewModel.toggleTaskCompletion(it) },
+                                    onDropTask = {
+                                        NotificationHelper.cancelTaskAlarms(context, it)
+                                        viewModel.dropTask(it)
+                                    },
+                                    onEditTask = { taskToEdit = it },
+                                    onTaskDragged = { task, newTime ->
+                                        val updated = task.copy(startTime = newTime)
+                                        viewModel.onTaskDragged(task, newTime)
+                                        NotificationHelper.scheduleTaskDualAlarms(context, updated)
+                                    },
+                                    onAutoResolveConflicts = {
+                                        conflicts.firstOrNull()?.let { conflict ->
+                                            val updated = conflict.taskB.copy(startTime = conflict.taskA.endTime.plusMinutes(15))
+                                            viewModel.onTaskDragged(conflict.taskB, conflict.taskA.endTime.plusMinutes(15))
+                                            NotificationHelper.scheduleTaskDualAlarms(context, updated)
+                                        }
+                                    }
+                                )
+                            }
 
-                        CalendarViewMode.WEEK -> {
-                            WeeklyGridView(
-                                selectedDate = selectedDate,
-                                tasks = categoryFilteredAllTasks,
-                                onDateSelected = { viewModel.onDateSelected(it) },
-                                onEditTask = { taskToEdit = it },
-                                onTaskReassigned = { updatedTask ->
-                                    viewModel.updateTask(updatedTask)
-                                    NotificationHelper.scheduleTaskDualAlarms(context, updatedTask)
-                                }
-                            )
-                        }
+                            CalendarViewMode.WEEK -> {
+                                WeeklyGridView(
+                                    selectedDate = selectedDate,
+                                    tasks = categoryFilteredAllTasks,
+                                    onDateSelected = { viewModel.onDateSelected(it) },
+                                    onEditTask = { taskToEdit = it },
+                                    onTaskReassigned = { updatedTask ->
+                                        viewModel.updateTask(updatedTask)
+                                        NotificationHelper.scheduleTaskDualAlarms(context, updatedTask)
+                                    }
+                                )
+                            }
 
-                        CalendarViewMode.MONTH -> {
-                            MonthlyGridView(
-                                selectedDate = selectedDate,
-                                tasks = categoryFilteredAllTasks,
-                                onDateSelected = { viewModel.onDateSelected(it) },
-                                onEditTask = { taskToEdit = it }
-                            )
-                        }
+                            CalendarViewMode.MONTH -> {
+                                MonthlyGridView(
+                                    selectedDate = selectedDate,
+                                    tasks = categoryFilteredAllTasks,
+                                    onDateSelected = { viewModel.onDateSelected(it) },
+                                    onEditTask = { taskToEdit = it }
+                                )
+                            }
 
-                        CalendarViewMode.AGENDA -> {
-                            TabularTableView(
-                                tasks = filteredTasks,
-                                onEditTask = { taskToEdit = it }
-                            )
+                            CalendarViewMode.AGENDA -> {
+                                TabularTableView(
+                                    tasks = filteredTasks,
+                                    onEditTask = { taskToEdit = it }
+                                )
+                            }
                         }
                     }
                 }

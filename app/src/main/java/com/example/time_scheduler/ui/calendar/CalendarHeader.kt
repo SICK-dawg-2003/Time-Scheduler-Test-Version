@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -63,11 +64,11 @@ fun CalendarHeader(
     selectedCategoryFilter: Category?,
     onCategoryFilterSelected: (Category?) -> Unit,
     viewMode: CalendarViewMode,
-    onViewModeSelected: (CalendarViewMode) -> Unit,
     isDarkMode: Boolean = false,
     onToggleDarkMode: () -> Unit = {},
     onNotificationClick: () -> Unit = {},
     onShareClick: () -> Unit = {},
+    onOpenDrawer: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val configuration = LocalConfiguration.current
@@ -148,21 +149,35 @@ fun CalendarHeader(
 
             Spacer(modifier = Modifier.height(if (isLandscape) 4.dp else 10.dp))
 
-            // 2. Month Navigation Row: Separate Month Title Picker & Calendar Today Button
+            // 2. Month Navigation Row: [🍔 Hamburger Icon] [November 2026] [📅 Calendar Today Button]
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
-                        start = 16.dp,
+                        start = 12.dp,
                         end = if (isLandscape) 36.dp else 16.dp
                     ),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Month Header (Opens Month & Year Picker Dialog) + Separate Calendar Icon (Jumps to Today)
+                // Hamburger Menu Icon + Month Header (Opens Month/Year Picker) + Calendar Today Icon
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    IconButton(
+                        onClick = onOpenDrawer,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = "Open Side Panel",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
                     Text(
                         text = selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
                         fontSize = if (isLandscape) 18.sp else 22.sp,
@@ -173,7 +188,9 @@ fun CalendarHeader(
                             .clickable { isMonthPickerOpen = true }
                             .padding(end = 4.dp)
                     )
+
                     Spacer(modifier = Modifier.width(8.dp))
+
                     IconButton(
                         onClick = { onDateSelected(LocalDate.now()) },
                         modifier = Modifier.size(28.dp)
@@ -213,45 +230,9 @@ fun CalendarHeader(
                 }
             }
 
-            Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 16.dp))
+            Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 12.dp))
 
-            // 3. View Mode Segmented Bar: Day | Week | Month | Agenda
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                CalendarViewMode.entries.forEach { mode ->
-                    val isSelected = viewMode == mode
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 3.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                if (isSelected) MaterialTheme.colorScheme.primary
-                                else Color.Transparent
-                            )
-                            .clickable { onViewModeSelected(mode) }
-                            .padding(vertical = if (isLandscape) 6.dp else 10.dp)
-                    ) {
-                        Text(
-                            text = mode.label,
-                            fontSize = if (isLandscape) 11.sp else 13.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary
-                            else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 16.dp))
-
-            // 4. Week Day Selector Strip with Left (<) and Right (>) Navigation Arrows on both sides
+            // 3. Week Day Selector Strip with Left (<) and Right (>) Navigation Arrows on both sides
             if (viewMode == CalendarViewMode.DAY || viewMode == CalendarViewMode.AGENDA) {
                 Row(
                     modifier = Modifier
@@ -350,7 +331,7 @@ fun CalendarHeader(
                 Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 16.dp))
             }
 
-            // 5. Categories Section & Filter Pills (With Action Icons beside "Other" in Landscape Mode)
+            // 4. Categories Section & Filter Pills (With Action Icons beside "Other" in Landscape Mode)
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = "Categories",
