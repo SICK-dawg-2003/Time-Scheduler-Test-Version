@@ -94,7 +94,7 @@ fun CalendarHeader(
         Column(
             modifier = Modifier.padding(vertical = if (isLandscape) 6.dp else 10.dp)
         ) {
-            // 1. Top Bar: Calendar Title & Action Icons (Share, Notifications, Theme Toggle)
+            // 1. Top Bar: Calendar Title & Action Icons (Portrait Mode Only)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -112,33 +112,36 @@ fun CalendarHeader(
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    IconButton(onClick = onShareClick, modifier = Modifier.size(32.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "Share Schedule",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    IconButton(onClick = onNotificationClick, modifier = Modifier.size(32.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Notifications,
-                            contentDescription = "Notifications",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    IconButton(onClick = onToggleDarkMode, modifier = Modifier.size(32.dp)) {
-                        Icon(
-                            imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
-                            contentDescription = "Toggle Dark Mode",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
+                // Render Action Icons on Top Right in Portrait Mode ONLY
+                if (!isLandscape) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        IconButton(onClick = onShareClick, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "Share Schedule",
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        IconButton(onClick = onNotificationClick, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = "Notifications",
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        IconButton(onClick = onToggleDarkMode, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                contentDescription = "Toggle Dark Mode",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -347,7 +350,7 @@ fun CalendarHeader(
                 Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 16.dp))
             }
 
-            // 5. Categories Section & Filter Pills
+            // 5. Categories Section & Filter Pills (With Action Icons beside "Other" in Landscape Mode)
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = "Categories",
@@ -360,7 +363,8 @@ fun CalendarHeader(
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp)
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     item {
                         FilterChip(
@@ -397,6 +401,42 @@ fun CalendarHeader(
                                 containerColor = category.color.copy(alpha = 0.12f)
                             )
                         )
+                    }
+
+                    // In Landscape Mode ONLY: Action Icons placed right beside "Other" category pill!
+                    if (isLandscape) {
+                        item {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(start = 12.dp)
+                            ) {
+                                IconButton(onClick = onShareClick, modifier = Modifier.size(32.dp)) {
+                                    Icon(
+                                        imageVector = Icons.Default.Share,
+                                        contentDescription = "Share Schedule",
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                IconButton(onClick = onNotificationClick, modifier = Modifier.size(32.dp)) {
+                                    Icon(
+                                        imageVector = Icons.Default.Notifications,
+                                        contentDescription = "Notifications",
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                IconButton(onClick = onToggleDarkMode, modifier = Modifier.size(32.dp)) {
+                                    Icon(
+                                        imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                        contentDescription = "Toggle Dark Mode",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
