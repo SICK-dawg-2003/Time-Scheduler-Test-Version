@@ -1,5 +1,6 @@
 package com.example.time_scheduler.ui.calendar
 
+import android.media.Ringtone
 import android.media.RingtoneManager
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,6 +37,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -62,6 +65,18 @@ fun NotificationSettingsSheet(
 
     var selectedLeadTimeMinutes by remember { mutableIntStateOf(15) }
     var selectedSoundType by remember { mutableStateOf(AlarmSoundType.NOTIFICATION) }
+    
+    // Ringtone preview state & automatic cleanup on sheet dismissal
+    var currentRingtone by remember { mutableStateOf<Ringtone?>(null) }
+    var isPlayingPreview by remember { mutableStateOf(false) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            currentRingtone?.stop()
+            currentRingtone = null
+            isPlayingPreview = false
+        }
+    }
 
     val leadTimeOptions = listOf(
         5 to "5 mins before",
@@ -71,7 +86,12 @@ fun NotificationSettingsSheet(
     )
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            currentRingtone?.stop()
+            currentRingtone = null
+            isPlayingPreview = false
+            onDismiss()
+        },
         sheetState = sheetState
     ) {
         Column(
@@ -140,7 +160,7 @@ fun NotificationSettingsSheet(
                 }
             }
 
-            // Alarm Sound Type Selector & Audio Preview Button
+            // Alarm Sound Type Selector & Audio Play/Stop Preview Controls
             Column {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -154,21 +174,47 @@ fun NotificationSettingsSheet(
                         color = MaterialTheme.colorScheme.onSurface
                     )
 
-                    IconButton(
-                        onClick = {
-                            val soundUri = RingtoneManager.getDefaultUri(selectedSoundType.ringtoneType)
-                            val ringtone = RingtoneManager.getRingtone(context, soundUri)
-                            ringtone.play()
-                            Toast.makeText(context, "Playing preview: ${selectedSoundType.displayName}", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
-                            contentDescription = "Preview Sound",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isPlayingPreview) {
+                            // Stop Button (⏹️)
+                            IconButton(
+                                onClick = {
+                                    currentRingtone?.stop()
+                                    currentRingtone = null
+                                    isPlayingPreview = false
+                                    Toast.makeText(context, "Audio preview stopped.", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Stop,
+                                    contentDescription = "Stop Preview",
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        } else {
+                            // Play Button (🔊)
+                            IconButton(
+                                onClick = {
+                                    currentRingtone?.stop()
+                                    val soundUri = RingtoneManager.getDefaultUri(selectedSoundType.ringtoneType)
+                                    val ringtone = RingtoneManager.getRingtone(context, soundUri)
+                                    currentRingtone = ringtone
+                                    ringtone?.play()
+                                    isPlayingPreview = true
+                                    Toast.makeText(context, "Playing preview: ${selectedSoundType.displayName}", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                    contentDescription = "Play Preview",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -182,7 +228,11 @@ fun NotificationSettingsSheet(
                         val isSelected = selectedSoundType == soundType
                         FilterChip(
                             selected = isSelected,
-                            onClick = { selectedSoundType = soundType },
+                            onClick = {
+                                currentRingtone?.stop()
+                                isPlayingPreview = false
+                                selectedSoundType = soundType
+                            },
                             label = { Text(soundType.displayName, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer
@@ -195,6 +245,9 @@ fun NotificationSettingsSheet(
             // Schedule All Alarms Primary Button
             Button(
                 onClick = {
+                    currentRingtone?.stop()
+                    isPlayingPreview = false
+
                     var scheduledCount = 0
                     tasks.forEach { task ->
                         val updatedTask = task.copy(leadTimeMinutes = selectedLeadTimeMinutes)
@@ -231,6 +284,9 @@ fun NotificationSettingsSheet(
             // Instant Test Notification Outlined Button
             OutlinedButton(
                 onClick = {
+                    currentRingtone?.stop()
+                    isPlayingPreview = false
+
                     NotificationHelper.showReminderNotification(
                         context = context,
                         title = "Time Scheduler Test Notification",
