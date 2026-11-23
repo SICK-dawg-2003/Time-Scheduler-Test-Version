@@ -21,13 +21,10 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Title
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -75,13 +72,6 @@ fun TaskDialog(
     var activeCustomTimeTarget by remember { mutableStateOf<String?>(null) } // "START" or "END"
 
     val timeFormatter = remember { DateTimeFormatter.ofPattern("h:mm a") }
-    val leadTimeOptions = listOf(
-        15 to "15m before",
-        5 to "5m before",
-        30 to "30m before",
-        60 to "1h before",
-        0 to "At start"
-    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -319,32 +309,6 @@ fun TaskDialog(
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                             }
-                        }
-                    }
-                }
-
-                // Alarm Lead Time Selector Row
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Reminder Lead Time:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        leadTimeOptions.forEach { (mins, label) ->
-                            val isSelected = leadTimeMinutes == mins
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = { leadTimeMinutes = mins },
-                                label = { Text(label, fontSize = 10.sp, fontWeight = FontWeight.Medium) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
-                                )
-                            )
                         }
                     }
                 }
