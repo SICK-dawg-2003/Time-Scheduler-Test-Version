@@ -135,7 +135,7 @@ fun CalendarHeader(
 
             Spacer(modifier = Modifier.height(if (isLandscape) 4.dp else 10.dp))
 
-            // 2. Month Navigation Row: "November 2026" & Arrows
+            // 2. Month Navigation Row: "November 2026" with 📅 Today Icon directly beside it
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -146,58 +146,48 @@ fun CalendarHeader(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
-                    fontSize = if (isLandscape) 18.sp else 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                // Month Header + Today Calendar Icon directly beside it
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { onDateSelected(LocalDate.now()) }
+                ) {
+                    Text(
+                        text = selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
+                        fontSize = if (isLandscape) 18.sp else 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Icon(
+                        imageVector = Icons.Default.CalendarToday,
+                        contentDescription = "Jump to Today",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = {
-                            val prev = when (viewMode) {
-                                CalendarViewMode.DAY, CalendarViewMode.AGENDA -> selectedDate.minusDays(1)
-                                CalendarViewMode.WEEK -> selectedDate.minusWeeks(1)
-                                CalendarViewMode.MONTH -> selectedDate.minusMonths(1)
-                            }
-                            onDateSelected(prev)
-                        },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                            contentDescription = "Previous"
-                        )
-                    }
+                // Month-mode navigation arrows (if Weekday strip is hidden in MONTH view)
+                if (viewMode == CalendarViewMode.MONTH) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { onDateSelected(selectedDate.minusMonths(1)) },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                contentDescription = "Previous Month"
+                            )
+                        }
 
-                    IconButton(
-                        onClick = { onDateSelected(LocalDate.now()) },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CalendarToday,
-                            contentDescription = "Today",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = {
-                            val next = when (viewMode) {
-                                CalendarViewMode.DAY, CalendarViewMode.AGENDA -> selectedDate.plusDays(1)
-                                CalendarViewMode.WEEK -> selectedDate.plusWeeks(1)
-                                CalendarViewMode.MONTH -> selectedDate.plusMonths(1)
-                            }
-                            onDateSelected(next)
-                        },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = "Next"
-                        )
+                        IconButton(
+                            onClick = { onDateSelected(selectedDate.plusMonths(1)) },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = "Next Month"
+                            )
+                        }
                     }
                 }
             }
@@ -240,57 +230,102 @@ fun CalendarHeader(
 
             Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 16.dp))
 
-            // 4. Week Day Selector Strip (Shown ONLY for DAY and AGENDA modes to avoid duplication in WEEK and MONTH views)
-            if (viewMode == CalendarViewMode.DAY || viewMode == CalendarViewMode.AGENDA) {
+            // 4. Week Day Selector Strip with Left (<) and Right (>) Navigation Arrows on both sides
+            if (viewMode != CalendarViewMode.MONTH) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceAround
+                        .padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    weekDates.forEach { date ->
-                        val isSelected = date == selectedDate
-                        val isToday = date == LocalDate.now()
+                    // Left Arrow (<)
+                    IconButton(
+                        onClick = {
+                            val prev = when (viewMode) {
+                                CalendarViewMode.DAY, CalendarViewMode.AGENDA -> selectedDate.minusDays(1)
+                                CalendarViewMode.WEEK -> selectedDate.minusWeeks(1)
+                                else -> selectedDate.minusDays(1)
+                            }
+                            onDateSelected(prev)
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                            contentDescription = "Previous Date"
+                        )
+                    }
 
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(
-                                    if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                                    else Color.Transparent
+                    // 7 Weekday Date Chips Row
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        weekDates.forEach { date ->
+                            val isSelected = date == selectedDate
+                            val isToday = date == LocalDate.now()
+
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(
+                                        if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                                        else Color.Transparent
+                                    )
+                                    .clickable { onDateSelected(date) }
+                                    .padding(horizontal = 8.dp, vertical = if (isLandscape) 6.dp else 8.dp)
+                            ) {
+                                Text(
+                                    text = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()).uppercase(),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                .clickable { onDateSelected(date) }
-                                .padding(horizontal = 10.dp, vertical = if (isLandscape) 6.dp else 10.dp)
-                        ) {
-                            Text(
-                                text = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()).uppercase(),
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = if (isSelected) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = date.dayOfMonth.toString(),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isSelected) MaterialTheme.colorScheme.primary
-                                else if (isToday) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurface
-                            )
-                            if (isSelected) {
                                 Spacer(modifier = Modifier.height(2.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .size(4.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primary)
+                                Text(
+                                    text = date.dayOfMonth.toString(),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary
+                                    else if (isToday) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurface
                                 )
+                                if (isSelected) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(4.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.primary)
+                                    )
+                                }
                             }
                         }
                     }
+
+                    // Right Arrow (>)
+                    IconButton(
+                        onClick = {
+                            val next = when (viewMode) {
+                                CalendarViewMode.DAY, CalendarViewMode.AGENDA -> selectedDate.plusDays(1)
+                                CalendarViewMode.WEEK -> selectedDate.plusWeeks(1)
+                                else -> selectedDate.plusDays(1)
+                            }
+                            onDateSelected(next)
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = "Next Date"
+                        )
+                    }
                 }
+
                 Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 16.dp))
             }
 
