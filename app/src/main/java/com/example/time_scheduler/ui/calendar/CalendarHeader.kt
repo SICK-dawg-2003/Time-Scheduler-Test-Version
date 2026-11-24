@@ -94,7 +94,7 @@ fun CalendarHeader(
         Column(
             modifier = Modifier.padding(vertical = if (isLandscape) 6.dp else 10.dp)
         ) {
-            // 1. Month Navigation Row: [☰] [November 2026] [📅] [Share] [Notifications] [Dark/Light Mode] ... [< >]
+            // 1. Top Navigation Row
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -120,20 +120,61 @@ fun CalendarHeader(
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(4.dp))
+                    if (viewMode == CalendarViewMode.MONTH) {
+                        // Month View: [<] >> [Month Year] >> [>] >> [📅]
+                        IconButton(
+                            onClick = { onDateSelected(selectedDate.minusMonths(1)) },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                contentDescription = "Previous Month",
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
 
-                    Text(
-                        text = selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
-                        fontSize = if (isLandscape) 18.sp else 19.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        softWrap = false,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .clickable { isMonthPickerOpen = true }
-                            .padding(end = 2.dp)
-                    )
+                        Text(
+                            text = selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
+                            fontSize = if (isLandscape) 18.sp else 19.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { isMonthPickerOpen = true }
+                                .padding(horizontal = 2.dp)
+                        )
+
+                        IconButton(
+                            onClick = { onDateSelected(selectedDate.plusMonths(1)) },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = "Next Month",
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    } else {
+                        // Other Views: [Month Year] >> [📅]
+                        Spacer(modifier = Modifier.width(4.dp))
+
+                        Text(
+                            text = selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
+                            fontSize = if (isLandscape) 18.sp else 19.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { isMonthPickerOpen = true }
+                                .padding(end = 2.dp)
+                        )
+                    }
 
                     IconButton(
                         onClick = { onDateSelected(LocalDate.now()) },
@@ -177,31 +218,6 @@ fun CalendarHeader(
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp)
                         )
-                    }
-                }
-
-                if (viewMode == CalendarViewMode.MONTH) {
-                    Spacer(modifier = Modifier.weight(1f))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = { onDateSelected(selectedDate.minusMonths(1)) },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                                contentDescription = "Previous Month"
-                            )
-                        }
-
-                        IconButton(
-                            onClick = { onDateSelected(selectedDate.plusMonths(1)) },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = "Next Month"
-                            )
-                        }
                     }
                 }
             }

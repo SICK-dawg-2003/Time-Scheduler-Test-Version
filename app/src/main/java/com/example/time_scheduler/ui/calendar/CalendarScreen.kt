@@ -18,8 +18,6 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +29,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -53,15 +53,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -71,15 +69,22 @@ import androidx.core.content.ContextCompat
 import com.example.time_scheduler.data.TaskItem
 import com.example.time_scheduler.ui.ScheduleViewModel
 import com.example.time_scheduler.util.NotificationHelper
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
+import java.time.temporal.ChronoUnit
 import java.util.Locale
+import kotlin.math.abs
+
+private const val DAY_PAGER_CENTER = Int.MAX_VALUE / 2
 
 @Composable
 fun CalendarScreen(
     viewModel: ScheduleViewModel,
     currentViewMode: CalendarViewMode = CalendarViewMode.DAY,
+    onViewModeChange: (CalendarViewMode) -> Unit = {},
     isDarkMode: Boolean = false,
     onToggleDarkMode: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
@@ -90,7 +95,6 @@ fun CalendarScreen(
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     val selectedDate by viewModel.selectedDate.collectAsState()
-    val currentSelectedDate by rememberUpdatedState(selectedDate)
     val allTasks by viewModel.allTasks.collectAsState()
     val conflicts by viewModel.conflicts.collectAsState()
     val categoryFilter by viewModel.selectedCategoryFilter.collectAsState()
@@ -101,6 +105,64 @@ fun CalendarScreen(
     var isDayMonthPickerOpen by remember { mutableStateOf(false) }
 
     val mainScrollState = rememberScrollState()
+
+    val anchorDate = remember { selectedDate }
+    val dayPagerState = rememberPagerState(
+        initialPage = DAY_PAGER_CENTER,
+        pageCount = { Int.MAX_VALUE }
+    )
+    var isSyncingFromExternalDate by remember { mutableStateOf(false) }
+    var previousViewMode by remember { mutableStateOf(currentViewMode) }
+
+    // Sync pager when selectedDate changes externally (e.g., tapping a date in Month view or Today button)
+    LaunchedEffect(selectedDate, currentViewMode) {
+        if (currentViewMode == CalendarViewMode.DAY) {
+            val targetPage = DAY_PAGER_CENTER + ChronoUnit.DAYS.between(anchorDate, selectedDate).toInt()
+            val justEnteredDayView = previousViewMode != CalendarViewMode.DAY
+            previousViewMode = currentViewMode
+
+            if (dayPagerState.currentPage != targetPage) {
+                isSyncingFromExternalDate = true
+                try {
+                    if (justEnteredDayView || abs(dayPagerState.currentPage - targetPage) > 31) {
+                        dayPagerState.scrollToPage(targetPage)
+                    } else {
+                        dayPagerState.animateScrollToPage(
+                            page = targetPage,
+                            animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing)
+                        )
+                    }
+                } finally {
+                    isSyncingFromExternalDate = false
+                }
+            }
+        } else {
+            previousViewMode = currentViewMode
+        }
+    }
+
+    // Update ViewModel only when the user manually swipes horizontally in Day view
+    LaunchedEffect(dayPagerState, currentViewMode) {
+        if (currentViewMode == CalendarViewMode.DAY) {
+            snapshotFlow { dayPagerState.settledPage }
+                .drop(1)
+                .distinctUntilChanged()
+                .collect { page ->
+                    if (!isSyncingFromExternalDate) {
+                        val targetDate = anchorDate.plusDays((page - DAY_PAGER_CENTER).toLong())
+                        if (targetDate != selectedDate) {
+                            viewModel.onDateSelected(targetDate)
+                        }
+                    }
+                }
+        }
+    }
+
+    val liveHeaderDate = if (currentViewMode == CalendarViewMode.DAY) {
+        anchorDate.plusDays((dayPagerState.currentPage - DAY_PAGER_CENTER).toLong())
+    } else {
+        selectedDate
+    }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -159,7 +221,7 @@ fun CalendarScreen(
         ) {
             if (currentViewMode == CalendarViewMode.DAY) {
                 // Day View Top Bar:
-                // [☰] >> [Month Year ⌄] >> [📅] >> [🌙/☀️] >> [Day / (Date)]
+                // [☰] >> [(Date)] >> [Month Year ⌄] >> [📅] ... [🌙/☀️] [Day]
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -179,9 +241,44 @@ fun CalendarScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
 
-                    // 2. Month & Year Display with Downward Arrow
+                    // 2. Circled Date Number
+                    AnimatedContent(
+                        targetState = liveHeaderDate,
+                        transitionSpec = {
+                            val forward = targetState.isAfter(initialState)
+                            val slideIn = slideInHorizontally(
+                                animationSpec = tween(220, easing = FastOutSlowInEasing),
+                                initialOffsetX = { fullWidth -> if (forward) fullWidth else -fullWidth }
+                            ) + fadeIn(animationSpec = tween(180))
+                            val slideOut = slideOutHorizontally(
+                                animationSpec = tween(220, easing = FastOutSlowInEasing),
+                                targetOffsetX = { fullWidth -> if (forward) -fullWidth else fullWidth }
+                            ) + fadeOut(animationSpec = tween(150))
+                            slideIn.togetherWith(slideOut)
+                        },
+                        label = "DateCircleSlideAnimation"
+                    ) { animatedDate ->
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(30.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer)
+                        ) {
+                            Text(
+                                text = animatedDate.dayOfMonth.toString(),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    // 3. Month & Year Display with Downward Arrow Button
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
@@ -190,7 +287,7 @@ fun CalendarScreen(
                             .padding(horizontal = 4.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
+                            text = liveHeaderDate.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -206,7 +303,7 @@ fun CalendarScreen(
                         )
                     }
 
-                    // 3. Calendar Icon (Jump to Today)
+                    // 4. Calendar Icon (Jump to Today)
                     IconButton(
                         onClick = { viewModel.onDateSelected(LocalDate.now()) },
                         modifier = Modifier.size(30.dp)
@@ -219,7 +316,9 @@ fun CalendarScreen(
                         )
                     }
 
-                    // 4. Light/Dark Mode Toggle
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // 5. Light/Dark Mode Toggle next to Day Label
                     IconButton(
                         onClick = onToggleDarkMode,
                         modifier = Modifier.size(30.dp)
@@ -232,52 +331,32 @@ fun CalendarScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.width(4.dp))
 
-                    // 5. Animated Day Label on Top + Circled Date Number Below (e.g., Tue / (24))
+                    // 6. Day Label (e.g., Mon, Tue)
                     AnimatedContent(
-                        targetState = selectedDate,
+                        targetState = liveHeaderDate,
                         transitionSpec = {
                             val forward = targetState.isAfter(initialState)
                             val slideIn = slideInHorizontally(
-                                animationSpec = tween(260, easing = FastOutSlowInEasing),
+                                animationSpec = tween(220, easing = FastOutSlowInEasing),
                                 initialOffsetX = { fullWidth -> if (forward) fullWidth else -fullWidth }
-                            ) + fadeIn(animationSpec = tween(220))
+                            ) + fadeIn(animationSpec = tween(180))
                             val slideOut = slideOutHorizontally(
-                                animationSpec = tween(260, easing = FastOutSlowInEasing),
+                                animationSpec = tween(220, easing = FastOutSlowInEasing),
                                 targetOffsetX = { fullWidth -> if (forward) -fullWidth else fullWidth }
-                            ) + fadeOut(animationSpec = tween(180))
+                            ) + fadeOut(animationSpec = tween(150))
                             slideIn.togetherWith(slideOut)
                         },
-                        label = "DayBadgeSlideAnimation"
+                        label = "DayLabelSlideAnimation"
                     ) { animatedDate ->
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                            modifier = Modifier.padding(end = 4.dp)
-                        ) {
-                            Text(
-                                text = animatedDate.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .size(30.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer)
-                            ) {
-                                Text(
-                                    text = animatedDate.dayOfMonth.toString(),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
-                        }
+                        Text(
+                            text = animatedDate.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(end = 6.dp)
+                        )
                     }
                 }
             } else {
@@ -314,78 +393,40 @@ fun CalendarScreen(
             ) {
                 when (currentViewMode) {
                     CalendarViewMode.DAY -> {
-                        var totalHorizontalDrag by remember { mutableFloatStateOf(0f) }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .pointerInput(Unit) {
-                                    detectHorizontalDragGestures(
-                                        onDragStart = { totalHorizontalDrag = 0f },
-                                        onHorizontalDrag = { change, dragAmount ->
-                                            change.consume()
-                                            totalHorizontalDrag += dragAmount
-                                        },
-                                        onDragEnd = {
-                                            val swipeThresholdPx = 75f
-                                            if (totalHorizontalDrag < -swipeThresholdPx) {
-                                                // Finger slid left -> advance date forward
-                                                viewModel.onDateSelected(currentSelectedDate.plusDays(1))
-                                            } else if (totalHorizontalDrag > swipeThresholdPx) {
-                                                // Finger slid right -> go back to previous date
-                                                viewModel.onDateSelected(currentSelectedDate.minusDays(1))
-                                            }
-                                            totalHorizontalDrag = 0f
-                                        },
-                                        onDragCancel = { totalHorizontalDrag = 0f }
-                                    )
-                                }
-                        ) {
-                            AnimatedContent(
-                                targetState = selectedDate,
-                                transitionSpec = {
-                                    val forward = targetState.isAfter(initialState)
-                                    val slideIn = slideInHorizontally(
-                                        animationSpec = tween(280, easing = FastOutSlowInEasing),
-                                        initialOffsetX = { fullWidth -> if (forward) fullWidth else -fullWidth }
-                                    ) + fadeIn(animationSpec = tween(240))
-                                    val slideOut = slideOutHorizontally(
-                                        animationSpec = tween(280, easing = FastOutSlowInEasing),
-                                        targetOffsetX = { fullWidth -> if (forward) -fullWidth else fullWidth }
-                                    ) + fadeOut(animationSpec = tween(200))
-                                    slideIn.togetherWith(slideOut)
-                                },
-                                label = "DailyTimelineSlideAnimation"
-                            ) { animatedDate ->
-                                val dayTasks = remember(allTasks, animatedDate, categoryFilter) {
-                                    allTasks.filter { task ->
-                                        task.date == animatedDate && (categoryFilter == null || task.category == categoryFilter)
-                                    }.sortedBy { it.startTime }
-                                }
-
-                                DailyTimelineView(
-                                    tasks = dayTasks,
-                                    conflicts = if (animatedDate == selectedDate) conflicts else emptyList(),
-                                    onToggleTaskCompletion = { viewModel.toggleTaskCompletion(it) },
-                                    onDropTask = {
-                                        NotificationHelper.cancelTaskAlarms(context, it)
-                                        viewModel.dropTask(it)
-                                    },
-                                    onEditTask = { taskToEdit = it },
-                                    onTaskDragged = { task, newTime ->
-                                        val updated = task.copy(startTime = newTime)
-                                        viewModel.onTaskDragged(task, newTime)
-                                        NotificationHelper.scheduleTaskDualAlarms(context, updated)
-                                    },
-                                    onAutoResolveConflicts = {
-                                        conflicts.firstOrNull()?.let { conflict ->
-                                            val updated = conflict.taskB.copy(startTime = conflict.taskA.endTime.plusMinutes(15))
-                                            viewModel.onTaskDragged(conflict.taskB, conflict.taskA.endTime.plusMinutes(15))
-                                            NotificationHelper.scheduleTaskDualAlarms(context, updated)
-                                        }
-                                    }
-                                )
+                        HorizontalPager(
+                            state = dayPagerState,
+                            beyondViewportPageCount = 1,
+                            modifier = Modifier.fillMaxSize()
+                        ) { page ->
+                            val pageDate = anchorDate.plusDays((page - DAY_PAGER_CENTER).toLong())
+                            val pageTasks = remember(allTasks, pageDate, categoryFilter) {
+                                allTasks.filter { task ->
+                                    task.date == pageDate && (categoryFilter == null || task.category == categoryFilter)
+                                }.sortedBy { it.startTime }
                             }
+
+                            DailyTimelineView(
+                                tasks = pageTasks,
+                                conflicts = if (pageDate == selectedDate) conflicts else emptyList(),
+                                onToggleTaskCompletion = { viewModel.toggleTaskCompletion(it) },
+                                onDropTask = {
+                                    NotificationHelper.cancelTaskAlarms(context, it)
+                                    viewModel.dropTask(it)
+                                },
+                                onEditTask = { taskToEdit = it },
+                                onTaskDragged = { task, newTime ->
+                                    val updated = task.copy(startTime = newTime)
+                                    viewModel.onTaskDragged(task, newTime)
+                                    NotificationHelper.scheduleTaskDualAlarms(context, updated)
+                                },
+                                onAutoResolveConflicts = {
+                                    conflicts.firstOrNull()?.let { conflict ->
+                                        val updated = conflict.taskB.copy(startTime = conflict.taskA.endTime.plusMinutes(15))
+                                        viewModel.onTaskDragged(conflict.taskB, conflict.taskA.endTime.plusMinutes(15))
+                                        NotificationHelper.scheduleTaskDualAlarms(context, updated)
+                                    }
+                                }
+                            )
                         }
                     }
 
@@ -407,7 +448,11 @@ fun CalendarScreen(
                             selectedDate = selectedDate,
                             tasks = categoryFilteredAllTasks,
                             onDateSelected = { viewModel.onDateSelected(it) },
-                            onEditTask = { taskToEdit = it }
+                            onEditTask = { taskToEdit = it },
+                            onOpenDayView = { clickedDate ->
+                                viewModel.onDateSelected(clickedDate)
+                                onViewModeChange(CalendarViewMode.DAY)
+                            }
                         )
                     }
 
@@ -470,7 +515,6 @@ fun CalendarScreen(
         }
     }
 
-    // Month & Year Picker Dialog for Day View's Month Display
     if (isDayMonthPickerOpen) {
         MonthYearPickerDialog(
             selectedDate = selectedDate,

@@ -60,7 +60,7 @@ import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private const val HOUR_ROW_HEIGHT_DP = 64
+private const val HOUR_ROW_HEIGHT_DP = 60
 
 @Composable
 fun WeeklyGridView(
@@ -73,14 +73,14 @@ fun WeeklyGridView(
 ) {
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
-    val hourFormatter = remember { DateTimeFormatter.ofPattern("h a") }
+    val hourFormatter = remember { DateTimeFormatter.ofPattern("h a", Locale.getDefault()) }
 
-    // Live Ticker tracking current time
+    // Live ticker tracking current time
     var currentTime by remember { mutableStateOf(LocalTime.now()) }
     LaunchedEffect(Unit) {
         while (true) {
             currentTime = LocalTime.now()
-            delay(10000L) // Update ticker every 10 seconds
+            delay(10000L)
         }
     }
 
@@ -92,6 +92,8 @@ fun WeeklyGridView(
     val weekDates = remember(startOfWeek) {
         (0..6).map { startOfWeek.plusDays(it.toLong()) }
     }
+    val today = LocalDate.now()
+    val todayColumnIndex = weekDates.indexOf(today)
 
     Column(modifier = modifier.fillMaxSize()) {
         // 7-Day Header Row with Previous (<) and Next (>) Week Navigation Arrows
@@ -130,7 +132,7 @@ fun WeeklyGridView(
                 ) {
                     weekDates.forEach { date ->
                         val isSelected = date == selectedDate
-                        val isToday = date == LocalDate.now()
+                        val isToday = date == today
 
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -181,22 +183,24 @@ fun WeeklyGridView(
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-        // 7-Day Tabular Cell Matrix Scroll Area (Full 24 Hours: 12:00 AM through 11:00 PM)
+        // 7-Day Tabular Cell Matrix Scroll Area (Full 24 Hours: 12 am through 11 pm)
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
                 .padding(bottom = 80.dp)
         ) {
-            // Subtract left gutter (50.dp) and right arrow width (28.dp) so columns match header alignment
             val totalGridWidthDp = (maxWidth - 78.dp).coerceAtLeast(100.dp)
             val singleColWidthPx = with(density) { (totalGridWidthDp / 7f).toPx() }
             val hourRowHeightPx = with(density) { HOUR_ROW_HEIGHT_DP.dp.toPx() }
 
-            // Background Tabular Matrix of Rounded Cell Cards
+            // Background Tabular Matrix of Rounded Cell Tiles with Uniform Border Spacing
             Column(modifier = Modifier.fillMaxSize()) {
                 for (hour in 0..23) {
-                    val hourLabel = LocalTime.of(hour, 0).format(hourFormatter)
+                    val hourLabel = LocalTime.of(hour, 0)
+                        .format(hourFormatter)
+                        .lowercase(Locale.getDefault())
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -210,10 +214,10 @@ fun WeeklyGridView(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
                                 .width(50.dp)
-                                .padding(start = 6.dp, top = 4.dp)
+                                .padding(start = 8.dp, top = 2.dp)
                         )
 
-                        // 7 Rounded Cell Card Matrix Blocks for this hour row
+                        // 7 Rounded Cell Tiles for this hour row with uniform 3.dp horizontal & vertical gaps
                         Row(
                             modifier = Modifier
                                 .weight(1f)
@@ -226,12 +230,12 @@ fun WeeklyGridView(
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxHeight()
-                                        .padding(vertical = 1.dp),
+                                        .padding(vertical = 1.5.dp),
                                     shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.55f),
                                     border = BorderStroke(
                                         0.5.dp,
-                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f)
+                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
                                     )
                                 ) {}
                             }
@@ -240,31 +244,46 @@ fun WeeklyGridView(
                 }
             }
 
-            // Live Red Current Time Horizontal Line Indicator across Weekly Matrix
-            val currentHourOffset = currentTime.hour + (currentTime.minute / 60f)
-            val currentTopPx = currentHourOffset * hourRowHeightPx
+            // Current Time & Current Day Column Indicator (Circle + Horizontal Line scoped to Today's Column)
+            if (todayColumnIndex >= 0) {
+                val currentHourOffset = currentTime.hour + (currentTime.minute / 60f)
+                val indicatorTopPx = currentHourOffset * hourRowHeightPx
+                val indicatorColor = MaterialTheme.colorScheme.onSurface
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .offset { IntOffset(0, currentTopPx.roundToInt()) }
-            ) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 50.dp, end = 28.dp)
+                        .offset { IntOffset(0, (indicatorTopPx - with(density) { 4.5.dp.toPx() }).roundToInt()) },
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .padding(start = 45.dp)
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(Color.Red)
-                    )
-                    HorizontalDivider(
-                        color = Color.Red,
-                        thickness = 2.dp,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    for (dayIdx in 0..6) {
+                        if (dayIdx == todayColumnIndex) {
+                            Box(
+                                contentAlignment = Alignment.CenterStart,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(9.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(2.dp)
+                                        .background(indicatorColor)
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .offset(x = (-3).dp)
+                                        .size(9.dp)
+                                        .clip(CircleShape)
+                                        .background(indicatorColor)
+                                )
+                            }
+                        } else {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
                 }
             }
 
