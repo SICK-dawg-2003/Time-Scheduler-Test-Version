@@ -48,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.time_scheduler.data.Category
@@ -95,74 +96,21 @@ fun CalendarHeader(
         Column(
             modifier = Modifier.padding(vertical = if (isLandscape) 6.dp else 10.dp)
         ) {
-            // 1. Top Bar: Calendar Title & Action Icons (Portrait Mode Only)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        start = 16.dp,
-                        end = if (isLandscape) 36.dp else 16.dp
-                    ),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Calendar",
-                    fontSize = if (isLandscape) 18.sp else 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                // Render Action Icons on Top Right in Portrait Mode ONLY
-                if (!isLandscape) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        IconButton(onClick = onShareClick, modifier = Modifier.size(32.dp)) {
-                            Icon(
-                                imageVector = Icons.Default.Share,
-                                contentDescription = "Share Schedule",
-                                tint = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        IconButton(onClick = onNotificationClick, modifier = Modifier.size(32.dp)) {
-                            Icon(
-                                imageVector = Icons.Default.Notifications,
-                                contentDescription = "Notifications",
-                                tint = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        IconButton(onClick = onToggleDarkMode, modifier = Modifier.size(32.dp)) {
-                            Icon(
-                                imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
-                                contentDescription = "Toggle Dark Mode",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(if (isLandscape) 4.dp else 10.dp))
-
-            // 2. Month Navigation Row: [🍔 Hamburger Icon] [November 2026] [📅 Calendar Today Button]
+            // 1. Month Navigation Row: [☰] [November 2026] [📅] [Indent] [Share] [Notifications] [Dark/Light Mode]
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
                         start = 12.dp,
-                        end = if (isLandscape) 36.dp else 16.dp
+                        end = if (isLandscape) 16.dp else 12.dp
                     ),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Hamburger Menu Icon + Month Header (Opens Month/Year Picker) + Calendar Today Icon
+                // Hamburger Menu Icon + Month Header + Today Jump Icon
                 Row(
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
                 ) {
                     IconButton(
                         onClick = onOpenDrawer,
@@ -180,16 +128,18 @@ fun CalendarHeader(
 
                     Text(
                         text = selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
-                        fontSize = if (isLandscape) 18.sp else 22.sp,
+                        fontSize = if (isLandscape) 18.sp else 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
                             .clickable { isMonthPickerOpen = true }
                             .padding(end = 4.dp)
                     )
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
 
                     IconButton(
                         onClick = { onDateSelected(LocalDate.now()) },
@@ -204,8 +154,43 @@ fun CalendarHeader(
                     }
                 }
 
-                // Month-mode navigation arrows (if Weekday strip is hidden in MONTH view)
+                // Adjust this width to change the indent beside the calendar icon
+                Spacer(modifier = Modifier.width(12.dp))
+
+                // Action Icons placed directly beside the Calendar Today icon (Portrait & Landscape)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    IconButton(onClick = onShareClick, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share Schedule",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    IconButton(onClick = onNotificationClick, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Notifications,
+                            contentDescription = "Notifications",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    IconButton(onClick = onToggleDarkMode, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                            contentDescription = "Toggle Dark Mode",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                // Month-mode navigation arrows pushed to the far right when in MONTH view
                 if (viewMode == CalendarViewMode.MONTH) {
+                    Spacer(modifier = Modifier.weight(1f))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(
                             onClick = { onDateSelected(selectedDate.minusMonths(1)) },
@@ -232,7 +217,7 @@ fun CalendarHeader(
 
             Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 12.dp))
 
-            // 3. Week Day Selector Strip with Left (<) and Right (>) Navigation Arrows on both sides
+            // 2. Week Day Selector Strip with Left (<) and Right (>) Navigation Arrows on both sides
             if (viewMode == CalendarViewMode.DAY || viewMode == CalendarViewMode.AGENDA) {
                 Row(
                     modifier = Modifier
@@ -331,7 +316,7 @@ fun CalendarHeader(
                 Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 16.dp))
             }
 
-            // 4. Categories Section & Filter Pills (With Action Icons beside "Other" in Landscape Mode)
+            // 3. Categories Section & Filter Pills
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = "Categories",
@@ -382,42 +367,6 @@ fun CalendarHeader(
                                 containerColor = category.color.copy(alpha = 0.12f)
                             )
                         )
-                    }
-
-                    // In Landscape Mode ONLY: Action Icons placed right beside "Other" category pill!
-                    if (isLandscape) {
-                        item {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                modifier = Modifier.padding(start = 12.dp)
-                            ) {
-                                IconButton(onClick = onShareClick, modifier = Modifier.size(32.dp)) {
-                                    Icon(
-                                        imageVector = Icons.Default.Share,
-                                        contentDescription = "Share Schedule",
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                IconButton(onClick = onNotificationClick, modifier = Modifier.size(32.dp)) {
-                                    Icon(
-                                        imageVector = Icons.Default.Notifications,
-                                        contentDescription = "Notifications",
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                IconButton(onClick = onToggleDarkMode, modifier = Modifier.size(32.dp)) {
-                                    Icon(
-                                        imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
-                                        contentDescription = "Toggle Dark Mode",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
             }
