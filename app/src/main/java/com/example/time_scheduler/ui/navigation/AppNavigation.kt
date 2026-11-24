@@ -1,35 +1,52 @@
 package com.example.time_scheduler.ui.navigation
 
+import android.content.res.Configuration
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CalendarViewMonth
 import androidx.compose.material.icons.filled.CropFree
+import androidx.compose.material.icons.filled.ViewAgenda
+import androidx.compose.material.icons.filled.ViewDay
+import androidx.compose.material.icons.filled.ViewWeek
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.time_scheduler.ui.ScheduleViewModel
 import com.example.time_scheduler.ui.calendar.CalendarScreen
+import com.example.time_scheduler.ui.calendar.CalendarViewMode
 import com.example.time_scheduler.ui.camera.CameraScanScreen
+import kotlinx.coroutines.launch
 
 enum class AppDestination(
     val route: String,
@@ -47,55 +64,146 @@ fun MainAppNavigation(
     onToggleDarkMode: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     var currentDestination by remember { mutableStateOf(AppDestination.CALENDAR) }
+    var currentViewMode by remember { mutableStateOf(CalendarViewMode.DAY) }
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val isTabletOrExpanded = maxWidth > 600.dp
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val coroutineScope = rememberCoroutineScope()
+    val drawerScrollState = rememberScrollState()
 
-        if (isTabletOrExpanded) {
-            // Tablet / Foldable Responsive Layout with Navigation Rail
-            Row(modifier = Modifier.fillMaxSize()) {
-                NavigationRail(
-                    modifier = Modifier.fillMaxHeight(),
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+    val sidepanelItems = listOf(
+        Triple(CalendarViewMode.AGENDA, "Agenda", Icons.Default.ViewAgenda),
+        Triple(CalendarViewMode.DAY, "Day", Icons.Default.ViewDay),
+        Triple(CalendarViewMode.WEEK, "Week", Icons.Default.ViewWeek),
+        Triple(CalendarViewMode.MONTH, "Month", Icons.Default.CalendarViewMonth)
+    )
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = true,
+        modifier = modifier.fillMaxSize(),
+        drawerContent = {
+            ModalDrawerSheet(
+                drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.width(280.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                        .verticalScroll(drawerScrollState)
                 ) {
-                    Spacer(modifier = Modifier.weight(1f))
-                    AppDestination.entries.forEach { destination ->
-                        NavigationRailItem(
-                            selected = currentDestination == destination,
-                            onClick = { currentDestination = destination },
-                            icon = {
-                                Icon(
-                                    imageVector = destination.icon,
-                                    contentDescription = destination.title
+                    Text(
+                        text = "UniSync Schedule",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 12.dp)
+                    )
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(vertical = 6.dp)
+                    )
+
+                    // 1. Navigation Destinations (Calendar & Scanner)
+                    Text(
+                        text = "MAIN NAVIGATION",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
+                    )
+
+                    AppDestination.entries.forEach { dest ->
+                        val isSelected = currentDestination == dest
+                        NavigationDrawerItem(
+                            label = {
+                                Text(
+                                    text = dest.title,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 14.sp
                                 )
                             },
-                            label = { Text(destination.title) }
+                            icon = {
+                                Icon(
+                                    imageVector = dest.icon,
+                                    contentDescription = dest.title,
+                                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            selected = isSelected,
+                            onClick = {
+                                currentDestination = dest
+                                coroutineScope.launch { drawerState.close() }
+                            },
+                            colors = NavigationDrawerItemDefaults.colors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.padding(vertical = 3.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.weight(1f))
-                }
 
-                // Main Content View
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                ) {
-                    when (currentDestination) {
-                        AppDestination.CALENDAR -> CalendarScreen(
-                            viewModel = viewModel,
-                            isDarkMode = isDarkMode,
-                            onToggleDarkMode = onToggleDarkMode
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+
+                    // 2. Calendar View Modes (Agenda, Day, Week, Month)
+                    Text(
+                        text = "CALENDAR VIEWS",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
+                    )
+
+                    sidepanelItems.forEach { (mode, label, icon) ->
+                        val isSelected = currentDestination == AppDestination.CALENDAR && currentViewMode == mode
+                        NavigationDrawerItem(
+                            label = {
+                                Text(
+                                    text = label,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 14.sp
+                                )
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = label,
+                                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            selected = isSelected,
+                            onClick = {
+                                currentDestination = AppDestination.CALENDAR
+                                currentViewMode = mode
+                                coroutineScope.launch { drawerState.close() }
+                            },
+                            colors = NavigationDrawerItemDefaults.colors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.padding(vertical = 3.dp)
                         )
-                        AppDestination.SCANNER -> CameraScanScreen(viewModel = viewModel)
                     }
                 }
             }
-        } else {
-            // Compact Phone Responsive Layout with Bottom Navigation Bar
-            Scaffold(
-                bottomBar = {
+        }
+    ) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            bottomBar = {
+                if (!isLandscape) {
                     NavigationBar(
                         containerColor = MaterialTheme.colorScheme.surfaceContainer
                     ) {
@@ -114,20 +222,22 @@ fun MainAppNavigation(
                         }
                     }
                 }
-            ) { innerPadding ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                ) {
-                    when (currentDestination) {
-                        AppDestination.CALENDAR -> CalendarScreen(
-                            viewModel = viewModel,
-                            isDarkMode = isDarkMode,
-                            onToggleDarkMode = onToggleDarkMode
-                        )
-                        AppDestination.SCANNER -> CameraScanScreen(viewModel = viewModel)
-                    }
+            }
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                when (currentDestination) {
+                    AppDestination.CALENDAR -> CalendarScreen(
+                        viewModel = viewModel,
+                        currentViewMode = currentViewMode,
+                        isDarkMode = isDarkMode,
+                        onToggleDarkMode = onToggleDarkMode,
+                        onOpenDrawer = { coroutineScope.launch { drawerState.open() } }
+                    )
+                    AppDestination.SCANNER -> CameraScanScreen(viewModel = viewModel)
                 }
             }
         }
