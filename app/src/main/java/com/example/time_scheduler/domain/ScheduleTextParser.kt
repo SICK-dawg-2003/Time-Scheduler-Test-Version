@@ -10,10 +10,22 @@ import java.util.Locale
 
 class ScheduleTextParser {
 
+    private val headerNoise = setOf(
+        "time", "activity", "note", "notes", "daily schedule",
+        "schedule", "timetable", "hours", "subject", "room", "day", "date"
+    )
+
+    // Requires at least one side of the range to have :MM or AM/PM so dates (11/24) or room numbers (3-4) are ignored
+    private val strictTimeRangeRegex = Regex(
+        """(?i)\b(\d{1,2}:\d{2}\s*(?:AM|PM)?|\d{1,2}\s*(?:AM|PM))\s*(?:[-–—~]|to|till|until)\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)\b"""
+    )
+
+    private val strictSingleTimeRegex = Regex(
+        """(?i)\b(\d{1,2}:\d{2}\s*(?:AM|PM)?|\d{1,2}\s*(?:AM|PM))\b"""
+    )
+
     /**
-     * Ultra-resilient Time-Anchor Row Span Spatial Parser.
-     * Uses recognized time ranges as vertical row anchors to assign Activity Titles and Notes/Descriptions
-     * to their exact rows with 100% mathematical precision regardless of ML Kit block groupings.
+     * Time-Anchor Row Span Spatial Parser with OCR confidence and symbol-noise filtering.
      */
     fun parseVisionTextHierarchy(
         visionText: Text,
@@ -24,18 +36,22 @@ class ScheduleTextParser {
             return parseScannedText(visionText.text, targetDate)
         }
 
-        // Noise header filter
-        val headerNoise = setOf("time", "activity", "note", "notes", "daily schedule", "schedule", "timetable", "hours", "subject", "room")
-        val validLines = allLines.filterNot { line ->
-            headerNoise.contains(line.text.lowercase().replace(Regex("""[^a-z\s]"""), "").trim())
+        // 1. Filter out low-confidence OCR artifacts, symbol noise, and table headers
+        val validLines = allLines.filter { line ->
+            val text = line.text.trim()
+            val confidenceOk = (line.confidence ?: 1.0f) >= 0.65f
+            val alnumCount = text.count { it.isLetterOrDigit() }
+            val cleanWord = text.lowercase(Locale.ROOT).replace(Regex("""[^a-z\s]"""), "").trim()
+
+            confidenceOk &&
+                    text.length >= 2 &&
+                    alnumCount >= (text.length * 0.5) &&
+                    !headerNoise.contains(cleanWord)
         }
 
-        val timeRangeRegex = Regex(
-            """(?i)(\b\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)\s*(?:[-–—~#/|]|to|till|until)\s*(\b\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)""",
-            RegexOption.IGNORE_CASE
-        )
+        if (validLines.isEmpty()) return emptyList()
 
-        // 1. Find all time lines (Row Anchors)
+        // 2. Find all verified time lines (Row Anchors)
         class TimeAnchor(
             val line: Text.Line,
             val startStr: String,
@@ -47,7 +63,7 @@ class ScheduleTextParser {
         val timeAnchors = mutableListOf<TimeAnchor>()
         for (line in validLines) {
             val sanitizedText = sanitizeOcrTimeText(line.text)
-            val rangeMatch = timeRangeRegex.find(sanitizedText)
+            val rangeMatch = strictTimeRangeRegex.find(sanitizedText)
             if (rangeMatch != null) {
                 val box = line.boundingBox ?: continue
                 timeAnchors.add(
@@ -62,19 +78,21 @@ class ScheduleTextParser {
             }
         }
 
-        // Sort time anchors vertically top-to-bottom
         val sortedAnchors = timeAnchors.sortedBy { it.top }
-
         if (sortedAnchors.isEmpty()) {
-            return parseScannedText(visionText.text, targetDate)
+            return parseScannedText(
+                validLines.joinToString("\n") { it.text },
+                targetDate
+            )
         }
 
-        // 2. Define row Y-spans for each time anchor with expanded Y-span tolerance
+        // 3. Assign non-time text lines to their vertical row spans in natural reading order
         val parsedTasks = mutableListOf<TaskItem>()
         var lastTrackedTime: LocalTime? = null
 
         val avgRowHeight = if (sortedAnchors.size > 1) {
-            (sortedAnchors.last().top - sortedAnchors.first().top) / (sortedAnchors.size - 1)
+            ((sortedAnchors.last().top - sortedAnchors.first().top) / (sortedAnchors.size - 1))
+                .coerceAtLeast(40)
         } else {
             100
         }
@@ -92,12 +110,17 @@ class ScheduleTextParser {
                 anchor.bottom + (avgRowHeight * 0.85).toInt()
             }
 
-            // Find all non-time lines whose Y-center falls inside this row Y-span
+            // Sort top-to-bottom (bucketed by 20px line height), then left-to-right
             val rowLines = nonTimeLines.filter { line ->
                 val box = line.boundingBox ?: return@filter false
                 val centerY = (box.top + box.bottom) / 2
                 centerY in rowTop..rowBottom
-            }.sortedBy { it.boundingBox?.left ?: 0 }
+            }.sortedWith(
+                compareBy(
+                    { (it.boundingBox?.top ?: 0) / 20 },
+                    { it.boundingBox?.left ?: 0 }
+                )
+            )
 
             var taskTitle = ""
             var description = "Imported from scanned schedule"
@@ -105,36 +128,41 @@ class ScheduleTextParser {
             if (rowLines.isNotEmpty()) {
                 val minX = rowLines.minOf { it.boundingBox?.left ?: 0 }
                 val maxX = rowLines.maxOf { it.boundingBox?.right ?: 0 }
-                val midX = (minX + maxX) / 2
+                val columnSpan = maxX - minX
 
-                val titleLines = rowLines.filter { (it.boundingBox?.left ?: 0) <= midX }
-                val noteLines = rowLines.filter { (it.boundingBox?.left ?: 0) > midX }
+                // Only split into Title vs. Notes columns if text spans wide horizontally (> 220px)
+                if (columnSpan > 220) {
+                    val midX = minX + (columnSpan * 0.55).toInt()
+                    val titleLines = rowLines.filter { (it.boundingBox?.left ?: 0) <= midX }
+                    val noteLines = rowLines.filter { (it.boundingBox?.left ?: 0) > midX }
 
-                taskTitle = titleLines.joinToString(" ") { it.text.trim() }
-                    .replace(Regex("""^[:\-\s•*]+"""), "").trim()
-
-                if (noteLines.isNotEmpty()) {
-                    description = noteLines.joinToString(" ") { it.text.trim() }
-                } else if (titleLines.size > 1) {
-                    taskTitle = titleLines[0].text.trim()
-                    description = titleLines.subList(1, titleLines.size).joinToString(" ") { it.text.trim() }
+                    taskTitle = cleanExtractedText(titleLines.joinToString(" ") { it.text.trim() })
+                    if (noteLines.isNotEmpty()) {
+                        description = cleanExtractedText(noteLines.joinToString(" ") { it.text.trim() })
+                    } else if (titleLines.size > 1) {
+                        taskTitle = cleanExtractedText(titleLines[0].text)
+                        description = cleanExtractedText(titleLines.drop(1).joinToString(" ") { it.text.trim() })
+                    }
+                } else {
+                    taskTitle = cleanExtractedText(rowLines[0].text)
+                    if (rowLines.size > 1) {
+                        description = cleanExtractedText(rowLines.drop(1).joinToString(" ") { it.text.trim() })
+                    }
                 }
             }
 
-            if (taskTitle.isBlank()) {
-                taskTitle = "Scanned Event"
-            }
-
-            val startTime = parseTimeWithChronology(anchor.startStr, lastTrackedTime) ?: LocalTime.of(9, 0)
+            val startTime = parseTimeWithChronology(anchor.startStr, lastTrackedTime) ?: continue
             val endTime = parseTimeWithChronology(anchor.endStr, startTime) ?: startTime.plusHours(1)
             lastTrackedTime = endTime
 
-            val combinedText = "$taskTitle $description"
+            // Skip empty placeholder rows if no readable title was captured
+            if (taskTitle.length < 2) continue
 
+            val combinedText = "$taskTitle$description"
             parsedTasks.add(
                 TaskItem(
                     title = taskTitle,
-                    description = description,
+                    description = description.ifBlank { "Imported from scanned schedule" },
                     date = targetDate,
                     startTime = startTime,
                     endTime = endTime,
@@ -147,201 +175,168 @@ class ScheduleTextParser {
     }
 
     /**
-     * Parses raw OCR text lines and applies chronological time progression.
+     * Parses raw OCR text lines when spatial bounding boxes are unavailable.
+     * Never fabricates tasks if no valid timestamps are found.
      */
     fun parseScannedText(rawText: String, targetDate: LocalDate = LocalDate.now()): List<TaskItem> {
-        val rawLines = rawText.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
-        
-        val headerNoise = setOf("time", "activity", "note", "notes", "daily schedule", "schedule", "timetable", "hours", "subject")
-        val lines = rawLines.filterNot { line ->
-            headerNoise.contains(line.lowercase().replace(Regex("""[^a-z\s]"""), "").trim())
-        }
+        val lines = rawText.split("\n")
+            .map { it.trim() }
+            .filter { line ->
+                val alnumCount = line.count { it.isLetterOrDigit() }
+                val cleanWord = line.lowercase(Locale.ROOT).replace(Regex("""[^a-z\s]"""), "").trim()
+                line.length >= 2 &&
+                        alnumCount >= (line.length * 0.5) &&
+                        !headerNoise.contains(cleanWord)
+            }
+
+        if (lines.isEmpty()) return emptyList()
 
         val parsedTasks = mutableListOf<TaskItem>()
-        val timeRangeRegex = Regex(
-            """(?i)(\b\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)\s*(?:[-–—~#/|]|to|till|until)\s*(\b\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)""",
-            RegexOption.IGNORE_CASE
-        )
-        val singleTimeRegex = Regex(
-            """(?i)\b(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)\b""",
-            RegexOption.IGNORE_CASE
-        )
-
         var lastTrackedTime: LocalTime? = null
         var i = 0
+
         while (i < lines.size) {
             val line = sanitizeOcrTimeText(lines[i])
-
             val columns = line.split(Regex("""[|\t]|\s{2,}""")).map { it.trim() }.filter { it.isNotEmpty() }
 
             if (columns.size >= 2) {
-                val timeColMatch = timeRangeRegex.find(columns[0])
+                val timeColMatch = strictTimeRangeRegex.find(columns[0])
                 if (timeColMatch != null) {
                     val startStr = timeColMatch.groupValues[1].trim()
                     val endStr = timeColMatch.groupValues[2].trim()
-                    val taskTitle = columns[1]
-                    val description = if (columns.size >= 3) columns[2] else "Imported from scanned schedule"
+                    val taskTitle = cleanExtractedText(columns[1])
+                    val description = if (columns.size >= 3) cleanExtractedText(columns[2]) else "Imported from scanned schedule"
 
-                    val startTime = parseTimeWithChronology(startStr, lastTrackedTime) ?: LocalTime.of(9, 0)
-                    val endTime = parseTimeWithChronology(endStr, startTime) ?: startTime.plusHours(1)
-                    lastTrackedTime = endTime
-
-                    val combinedText = "$taskTitle $description"
-
-                    parsedTasks.add(
-                        TaskItem(
-                            title = taskTitle,
-                            description = description,
-                            date = targetDate,
-                            startTime = startTime,
-                            endTime = endTime,
-                            category = detectCategory(combinedText)
+                    val startTime = parseTimeWithChronology(startStr, lastTrackedTime)
+                    if (startTime != null && taskTitle.length >= 2) {
+                        val endTime = parseTimeWithChronology(endStr, startTime) ?: startTime.plusHours(1)
+                        lastTrackedTime = endTime
+                        parsedTasks.add(
+                            TaskItem(
+                                title = taskTitle,
+                                description = description,
+                                date = targetDate,
+                                startTime = startTime,
+                                endTime = endTime,
+                                category = detectCategory("$taskTitle$description")
+                            )
                         )
-                    )
+                    }
                     i++
                     continue
                 }
             }
 
-            val rangeMatch = timeRangeRegex.find(line)
+            val rangeMatch = strictTimeRangeRegex.find(line)
             if (rangeMatch != null) {
                 val startStr = rangeMatch.groupValues[1].trim()
                 val endStr = rangeMatch.groupValues[2].trim()
-                
-                var title = line.removeRange(rangeMatch.range).trim().replace(Regex("""^[:\-\s•*]+"""), "").trim()
-                val description: String
 
-                if (title.isBlank() && i + 1 < lines.size) {
-                    title = lines[i + 1].trim().replace(Regex("""^[:\-\s•*]+"""), "").trim()
-                    description = if (i + 2 < lines.size && !timeRangeRegex.containsMatchIn(lines[i + 2])) {
-                        lines[i + 2].trim()
+                var title = cleanExtractedText(line.removeRange(rangeMatch.range))
+                var description = "Imported from scanned schedule"
+
+                if (title.isBlank() && i + 1 < lines.size && !strictTimeRangeRegex.containsMatchIn(sanitizeOcrTimeText(lines[i + 1]))) {
+                    title = cleanExtractedText(lines[i + 1])
+                    if (i + 2 < lines.size && !strictTimeRangeRegex.containsMatchIn(sanitizeOcrTimeText(lines[i + 2]))) {
+                        description = cleanExtractedText(lines[i + 2])
+                        i += 2
                     } else {
-                        "Imported from scanned schedule"
-                    }
-                    i++
-                } else if (i + 1 < lines.size && !timeRangeRegex.containsMatchIn(lines[i + 1])) {
-                    description = lines[i + 1].trim()
-                } else {
-                    description = "Imported from scanned schedule"
-                }
-
-                val startTime = parseTimeWithChronology(startStr, lastTrackedTime) ?: LocalTime.of(9, 0)
-                val endTime = parseTimeWithChronology(endStr, startTime) ?: startTime.plusHours(1)
-                lastTrackedTime = endTime
-
-                val taskTitle = if (title.isBlank()) "Scanned Event" else title
-                val combinedText = "$taskTitle $description"
-
-                parsedTasks.add(
-                    TaskItem(
-                        title = taskTitle,
-                        description = description,
-                        date = targetDate,
-                        startTime = startTime,
-                        endTime = endTime,
-                        category = detectCategory(combinedText)
-                    )
-                )
-            } else {
-                val singleMatch = singleTimeRegex.find(line)
-                if (singleMatch != null) {
-                    val timeStr = singleMatch.groupValues[1].trim()
-                    var title = line.removeRange(singleMatch.range).trim().replace(Regex("""^[:\-\s•*]+"""), "").trim()
-                    val description = "Imported from scanned schedule"
-
-                    if (title.isBlank() && i + 1 < lines.size) {
-                        title = lines[i + 1].trim().replace(Regex("""^[:\-\s•*]+"""), "").trim()
                         i++
                     }
+                } else if (i + 1 < lines.size && !strictTimeRangeRegex.containsMatchIn(sanitizeOcrTimeText(lines[i + 1]))) {
+                    description = cleanExtractedText(lines[i + 1])
+                    i++
+                }
 
-                    val startTime = parseTimeWithChronology(timeStr, lastTrackedTime) ?: LocalTime.of(10, 0)
-                    val endTime = startTime.plusHours(1)
+                val startTime = parseTimeWithChronology(startStr, lastTrackedTime)
+                if (startTime != null && title.length >= 2) {
+                    val endTime = parseTimeWithChronology(endStr, startTime) ?: startTime.plusHours(1)
                     lastTrackedTime = endTime
-
-                    val taskTitle = if (title.isBlank()) "Scanned Task" else title
-                    val combinedText = "$taskTitle $description"
-
                     parsedTasks.add(
                         TaskItem(
-                            title = taskTitle,
-                            description = description,
+                            title = title,
+                            description = description.ifBlank { "Imported from scanned schedule" },
                             date = targetDate,
                             startTime = startTime,
                             endTime = endTime,
-                            category = detectCategory(combinedText)
+                            category = detectCategory("$title$description")
                         )
                     )
+                }
+            } else {
+                val singleMatch = strictSingleTimeRegex.find(line)
+                if (singleMatch != null) {
+                    val timeStr = singleMatch.groupValues[1].trim()
+                    var title = cleanExtractedText(line.removeRange(singleMatch.range))
+
+                    if (title.isBlank() && i + 1 < lines.size && !strictSingleTimeRegex.containsMatchIn(sanitizeOcrTimeText(lines[i + 1]))) {
+                        title = cleanExtractedText(lines[i + 1])
+                        i++
+                    }
+
+                    val startTime = parseTimeWithChronology(timeStr, lastTrackedTime)
+                    if (startTime != null && title.length >= 2) {
+                        val endTime = startTime.plusHours(1)
+                        lastTrackedTime = endTime
+                        parsedTasks.add(
+                            TaskItem(
+                                title = title,
+                                description = "Imported from scanned schedule",
+                                date = targetDate,
+                                startTime = startTime,
+                                endTime = endTime,
+                                category = detectCategory(title)
+                            )
+                        )
+                    }
                 }
             }
             i++
         }
 
-        if (parsedTasks.isEmpty() && lines.isNotEmpty()) {
-            var defaultStart = LocalTime.of(9, 0)
-            for ((index, line) in lines.take(8).withIndex()) {
-                val cleanLine = line.replace(Regex("""^[:\-\s•*]+"""), "").trim()
-                if (cleanLine.isNotBlank() && cleanLine.length > 2) {
-                    val parts = cleanLine.split(":", limit = 2)
-                    val title = parts[0].trim()
-                    val desc = if (parts.size > 1) parts[1].trim() else "Extracted from scanned text block ${index + 1}"
-                    
-                    parsedTasks.add(
-                        TaskItem(
-                            title = if (title.length > 35) title.take(35) else title,
-                            description = desc,
-                            date = targetDate,
-                            startTime = defaultStart,
-                            endTime = defaultStart.plusHours(1),
-                            category = detectCategory("$title $desc")
-                        )
-                    )
-                    defaultStart = defaultStart.plusHours(1)
-                }
-            }
-        }
-
         return parsedTasks.sortedBy { it.startTime }
     }
 
+    private fun cleanExtractedText(raw: String): String {
+        return raw
+            .replace(Regex("""^[|:\-\s•*._]+"""), "")
+            .replace(Regex("""[|]+$"""), "")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+    }
+
     /**
-     * Ultra-flexible OCR Time Sanitizer.
-     * Fixes OCR digit typos ("I0:00" -> "10:00", "7.00" -> "7:00", "10am-11am" -> "10:00 AM - 11:00 AM").
+     * Targeted OCR Time Sanitizer that fixes common digit misreads without corrupting prose words.
      */
     private fun sanitizeOcrTimeText(rawText: String): String {
         var text = rawText
-        
-        // Replace digit misreadings: "I0:00" -> "10:00", "l2:00" -> "12:00", "7:OO" -> "7:00", "S:00" -> "5:00"
-        text = text.replace(Regex("""\bI(\d)"""), "1$1")
-            .replace(Regex("""\bl(\d)"""), "1$1")
-            .replace(Regex("""(\d)[O|o](\d)"""), "$10$2")
-            .replace(Regex("""(\d)[O|o]\b"""), "$10")
+
+        // Fix digit misreads only within time-like patterns (e.g., "I0:00" -> "10:00", "7:OO" -> "7:00")
+        text = text.replace(Regex("""\b[Il](\d:\d{2})"""), "1$1")
+            .replace(Regex("""(\d{1,2}:)[Oo]{2}\b"""), "${1}00")
+            .replace(Regex("""(\d{1,2}:)[Oo](\d)\b"""), "${1}0$2")
+            .replace(Regex("""(\d{1,2}:\d)[Oo]\b"""), "${1}0")
             .replace(Regex("""\bS:(\d{2})"""), "5:$1")
-            .replace(Regex("""\bZ:(\d{2})"""), "2:$1")
 
-        // Normalize time colons: "7.00" -> "7:00", "10;00" -> "10:00", "10 00" -> "10:00"
-        text = text.replace(Regex("""(\d{1,2})[.;'](\d{2})"""), "$1:$2")
-            .replace(Regex("""(\d{1,2})\s+(\d{2})\s*(AM|PM|am|pm)\b"""), "$1:$2 $3")
+        // Normalize time separators ("7.00" -> "7:00", "10;00" -> "10:00")
+        text = text.replace(Regex("""(\d{1,2})[.;](\d{2})"""), "$1:$2")
 
-        // Format short AM/PM times: "10am" -> "10:00 AM", "9pm" -> "9:00 PM"
+        // Format compact AM/PM times ("10am" -> "10:00 AM", "9pm" -> "9:00 PM")
         text = text.replace(Regex("""\b(\d{1,2})\s*(am|AM)\b"""), "$1:00 AM")
             .replace(Regex("""\b(\d{1,2})\s*(pm|PM)\b"""), "$1:00 PM")
 
-        // Normalize dashes/hyphens and range separators
-        text = text.replace(Regex("""\s*[-–—~#/|]|(?:\s+to\s+|\s+till\s+|\s+until\s+)\s*"""), " - ")
+        // Normalize range dashes/words without altering slashes in dates
+        text = text.replace(Regex("""\s*(?:[-–—~]|(?:\bto\b|\btill\b|\buntil\b))\s*""", RegexOption.IGNORE_CASE), " - ")
 
         return text.replace(Regex("""\s+"""), " ").trim()
     }
 
-    /**
-     * Parses time string with chronological AM/PM inference based on daily timetable progression.
-     */
     private fun parseTimeWithChronology(
         timeString: String,
         lastTime: LocalTime?
     ): LocalTime? {
         val clean = timeString.trim().uppercase(Locale.ROOT)
 
-        // Explicit AM/PM specified in text
         if (clean.contains("AM") || clean.contains("PM")) {
             return parseTime(clean)
         }
@@ -350,8 +345,9 @@ class ScheduleTextParser {
         val hour = parts.getOrNull(0)?.toIntOrNull() ?: return null
         val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
 
-        var inferredHour = hour
+        if (hour !in 0..23 || minute !in 0..59) return null
 
+        var inferredHour = hour
         if (lastTime != null) {
             val lastHour = lastTime.hour
             if (hour == 12) {
@@ -359,10 +355,8 @@ class ScheduleTextParser {
             } else if (hour in 1..11 && lastHour >= 11) {
                 inferredHour = hour + 12
             }
-        } else {
-            if (hour in 1..6) {
-                inferredHour = hour + 12
-            }
+        } else if (hour in 1..6) {
+            inferredHour = hour + 12
         }
 
         return try {
@@ -392,15 +386,12 @@ class ScheduleTextParser {
         for (formatter in formatters) {
             try {
                 return LocalTime.parse(clean, formatter)
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
         }
         return null
     }
 
-    /**
-     * Confidence-scored Category Classifier.
-     * Evaluates weighted keyword occurrences across title and notes/description text.
-     */
     private fun detectCategory(text: String): Category {
         val lower = text.lowercase(Locale.ROOT)
         val scores = mutableMapOf<Category, Int>().withDefault { 0 }
@@ -408,7 +399,7 @@ class ScheduleTextParser {
         val workKeywords = listOf("work", "meeting", "sync", "project", "review", "client", "office", "standup", "team", "planning", "sprint")
         val studyKeywords = listOf("study", "read", "books", "class", "exam", "homework", "lecture", "assignment", "research", "quiz", "math", "science", "english", "lessons", "practice")
         val healthKeywords = listOf("gym", "health", "doctor", "run", "workout", "cardio", "yoga", "meditation", "hospital", "fitness", "nap", "sleep", "walk", "cycling", "bath", "rest")
-        val urgentKeywords = listOf("urgent", "priority", "deadline", "asap", "important", "exam", "critical")
+        val urgentKeywords = listOf("urgent", "priority", "deadline", "asap", "important", "critical")
         val personalKeywords = listOf("wake up", "play", "snack", "lunch", "dinner", "movie", "coffee", "personal", "family", "birthday", "party", "home", "dad", "mom", "toys", "puzzles", "tv")
 
         for (kw in workKeywords) if (lower.contains(kw)) scores[Category.WORK] = scores.getValue(Category.WORK) + 1
