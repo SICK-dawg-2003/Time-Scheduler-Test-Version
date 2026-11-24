@@ -1,6 +1,5 @@
 package com.example.time_scheduler.ui.navigation
 
-import android.content.res.Configuration
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,8 +21,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Scaffold
@@ -37,7 +34,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -64,9 +60,6 @@ fun MainAppNavigation(
     onToggleDarkMode: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val configuration = LocalConfiguration.current
-    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-
     var currentDestination by remember { mutableStateOf(AppDestination.CALENDAR) }
     var currentViewMode by remember { mutableStateOf(CalendarViewMode.DAY) }
 
@@ -83,7 +76,7 @@ fun MainAppNavigation(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = true,
+        gesturesEnabled = drawerState.isOpen,
         modifier = modifier.fillMaxSize(),
         drawerContent = {
             ModalDrawerSheet(
@@ -201,28 +194,7 @@ fun MainAppNavigation(
         }
     ) {
         Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            bottomBar = {
-                if (!isLandscape) {
-                    NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer
-                    ) {
-                        AppDestination.entries.forEach { destination ->
-                            NavigationBarItem(
-                                selected = currentDestination == destination,
-                                onClick = { currentDestination = destination },
-                                icon = {
-                                    Icon(
-                                        imageVector = destination.icon,
-                                        contentDescription = destination.title
-                                    )
-                                },
-                                label = { Text(destination.title) }
-                            )
-                        }
-                    }
-                }
-            }
+            modifier = Modifier.fillMaxSize()
         ) { innerPadding ->
             Box(
                 modifier = Modifier

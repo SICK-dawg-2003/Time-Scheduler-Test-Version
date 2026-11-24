@@ -76,7 +76,6 @@ fun CalendarHeader(
 
     var isMonthPickerOpen by remember { mutableStateOf(false) }
 
-    // Generate current week dates centered around selected date
     val startOfWeek = selectedDate.minusDays((selectedDate.dayOfWeek.value % 7).toLong())
     val weekDates = (0..6).map { startOfWeek.plusDays(it.toLong()) }
 
@@ -95,7 +94,7 @@ fun CalendarHeader(
         Column(
             modifier = Modifier.padding(vertical = if (isLandscape) 6.dp else 10.dp)
         ) {
-            // 1. Month Navigation Row: [☰] [January 2027] [📅] [Indent] [Share] [Notifications] [Dark/Light Mode] ... [< >]
+            // 1. Month Navigation Row: [☰] [November 2026] [📅] [Share] [Notifications] [Dark/Light Mode] ... [< >]
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -106,7 +105,6 @@ fun CalendarHeader(
                 horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Hamburger Menu Icon + Month Header + Today Jump Icon (unweighted so full month text never truncates)
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -150,10 +148,8 @@ fun CalendarHeader(
                     }
                 }
 
-                // Adjust this width to change the indent beside the calendar icon
                 Spacer(modifier = Modifier.width(6.dp))
 
-                // Action Icons placed directly beside the Calendar Today icon (Portrait & Landscape)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(0.dp)
@@ -184,7 +180,6 @@ fun CalendarHeader(
                     }
                 }
 
-                // Month-mode navigation arrows pushed to the far right using only leftover space
                 if (viewMode == CalendarViewMode.MONTH) {
                     Spacer(modifier = Modifier.weight(1f))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -211,10 +206,10 @@ fun CalendarHeader(
                 }
             }
 
-            Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 12.dp))
-
-            // 2. Week Day Selector Strip with Left (<) and Right (>) Navigation Arrows on both sides
+            // 2. Week Day Selector Strip with Left (<) and Right (>) Navigation Arrows
             if (viewMode == CalendarViewMode.DAY || viewMode == CalendarViewMode.AGENDA) {
+                Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 10.dp))
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -222,7 +217,6 @@ fun CalendarHeader(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Left Arrow (<)
                     IconButton(
                         onClick = {
                             val prev = when (viewMode) {
@@ -240,7 +234,6 @@ fun CalendarHeader(
                         )
                     }
 
-                    // 7 Weekday Date Chips Row
                     Row(
                         modifier = Modifier.weight(1f),
                         horizontalArrangement = Arrangement.SpaceAround,
@@ -259,7 +252,7 @@ fun CalendarHeader(
                                         else Color.Transparent
                                     )
                                     .clickable { onDateSelected(date) }
-                                    .padding(horizontal = 10.dp, vertical = if (isLandscape) 6.dp else 10.dp)
+                                    .padding(horizontal = 10.dp, vertical = if (isLandscape) 6.dp else 8.dp)
                             ) {
                                 Text(
                                     text = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()).uppercase(),
@@ -290,7 +283,6 @@ fun CalendarHeader(
                         }
                     }
 
-                    // Right Arrow (>)
                     IconButton(
                         onClick = {
                             val next = when (viewMode) {
@@ -308,68 +300,69 @@ fun CalendarHeader(
                         )
                     }
                 }
-
-                Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 16.dp))
             }
 
-            // 3. Categories Section & Filter Pills
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "Categories",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
-                )
+            // 3. Categories Section & Filter Pills (Shown only in Agenda View)
+            if (viewMode == CalendarViewMode.AGENDA) {
+                Spacer(modifier = Modifier.height(if (isLandscape) 6.dp else 14.dp))
 
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    item {
-                        FilterChip(
-                            selected = selectedCategoryFilter == null,
-                            onClick = { onCategoryFilterSelected(null) },
-                            label = { Text("All", fontWeight = FontWeight.SemiBold, fontSize = 11.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer
-                            )
-                        )
-                    }
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Categories",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+                    )
 
-                    items(Category.entries.toTypedArray()) { category ->
-                        val isSelected = selectedCategoryFilter == category
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = {
-                                onCategoryFilterSelected(if (isSelected) null else category)
-                            },
-                            label = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(7.dp)
-                                            .clip(CircleShape)
-                                            .background(category.color)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(category.displayName, fontWeight = FontWeight.Medium, fontSize = 11.sp)
-                                }
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = category.color.copy(alpha = 0.25f),
-                                containerColor = category.color.copy(alpha = 0.12f)
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        item {
+                            FilterChip(
+                                selected = selectedCategoryFilter == null,
+                                onClick = { onCategoryFilterSelected(null) },
+                                label = { Text("All", fontWeight = FontWeight.SemiBold, fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer
+                                )
                             )
-                        )
+                        }
+
+                        items(Category.entries.toTypedArray()) { category ->
+                            val isSelected = selectedCategoryFilter == category
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    onCategoryFilterSelected(if (isSelected) null else category)
+                                },
+                                label = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(7.dp)
+                                                .clip(CircleShape)
+                                                .background(category.color)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(category.displayName, fontWeight = FontWeight.Medium, fontSize = 11.sp)
+                                    }
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = category.color.copy(alpha = 0.25f),
+                                    containerColor = category.color.copy(alpha = 0.12f)
+                                )
+                            )
+                        }
                     }
                 }
             }
         }
     }
 
-    // Month & Year Fast Picker Navigation Dialog
     if (isMonthPickerOpen) {
         MonthYearPickerDialog(
             selectedDate = selectedDate,
@@ -407,7 +400,6 @@ fun MonthYearPickerDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Year Stepper Row (< 2026 >)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -445,7 +437,6 @@ fun MonthYearPickerDialog(
                     }
                 }
 
-                // 12 Months Grid (JAN - DEC)
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()

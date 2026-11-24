@@ -68,7 +68,9 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
-private const val HOUR_HEIGHT_DP = 72
+private const val HOUR_HEIGHT_DP = 76
+private val TIME_GUTTER_WIDTH = 76.dp
+private val CELL_END_PADDING = 16.dp
 
 @Composable
 fun DailyTimelineView(
@@ -84,20 +86,18 @@ fun DailyTimelineView(
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
 
-    // Live Ticker tracking current time
     var currentTime by remember { mutableStateOf(LocalTime.now()) }
     LaunchedEffect(Unit) {
         while (true) {
             currentTime = LocalTime.now()
-            delay(10000L) // Update every 10 seconds
+            delay(10000L)
         }
     }
 
-    // Active task currently running right now
     val activeTask = remember(tasks, currentTime) {
         tasks.find { task ->
             !task.isCompleted &&
-            (currentTime.isAfter(task.startTime.minusSeconds(1)) && currentTime.isBefore(task.endTime))
+                    (currentTime.isAfter(task.startTime.minusSeconds(1)) && currentTime.isBefore(task.endTime))
         }
     }
 
@@ -108,8 +108,8 @@ fun DailyTimelineView(
                 color = MaterialTheme.colorScheme.errorContainer,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                shape = RoundedCornerShape(12.dp)
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                shape = RoundedCornerShape(14.dp)
             ) {
                 Row(
                     modifier = Modifier
@@ -159,10 +159,10 @@ fun DailyTimelineView(
             val remainingMinutes = Duration.between(currentTime, task.endTime).toMinutes().coerceAtLeast(0)
             Surface(
                 color = MaterialTheme.colorScheme.primaryContainer,
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
                     .clickable { onEditTask(task) }
             ) {
                 Row(
@@ -214,16 +214,16 @@ fun DailyTimelineView(
             }
         }
 
-        // Timeline Scroll Area
+        // Tabular 24-Hour Scroll Area (12:00 AM through 11:00 PM)
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(bottom = 80.dp)
+                .padding(top = 4.dp, bottom = 84.dp)
         ) {
-            // Background Tabular Matrix Cells for Timeline (12:00 AM through 11:00 PM)
+            // Background Tabular Hour Rows
             Column(modifier = Modifier.fillMaxSize()) {
-                val hourFormatter = DateTimeFormatter.ofPattern("h:mm a")
+                val hourFormatter = remember { DateTimeFormatter.ofPattern("h:mm a") }
                 for (hour in 0..23) {
                     val hourLabel = LocalTime.of(hour, 0).format(hourFormatter)
                     Row(
@@ -234,25 +234,24 @@ fun DailyTimelineView(
                     ) {
                         Text(
                             text = hourLabel,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
-                                .width(68.dp)
-                                .padding(start = 8.dp, top = 4.dp)
+                                .width(TIME_GUTTER_WIDTH)
+                                .padding(start = 16.dp, top = 8.dp)
                         )
 
-                        // Rounded Matrix Cell for this hour row
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
-                                .padding(end = 12.dp, top = 2.dp, bottom = 2.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+                                .padding(end = CELL_END_PADDING, top = 3.dp, bottom = 3.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
                             border = BorderStroke(
-                                0.5.dp,
-                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f)
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
                             )
                         ) {}
                     }
@@ -274,7 +273,7 @@ fun DailyTimelineView(
                 ) {
                     Box(
                         modifier = Modifier
-                            .padding(start = 60.dp)
+                            .padding(start = TIME_GUTTER_WIDTH - 5.dp)
                             .size(10.dp)
                             .clip(CircleShape)
                             .background(Color.Red)
@@ -282,16 +281,18 @@ fun DailyTimelineView(
                     HorizontalDivider(
                         color = Color.Red,
                         thickness = 2.dp,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(end = CELL_END_PADDING)
                     )
                 }
             }
 
-            // Task Cards Layer placed on timeline with drag-and-drop offset
+            // Scheduled Task Cards Aligned Inside Tabular Cell Bounds
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = 72.dp, end = 16.dp)
+                    .padding(start = TIME_GUTTER_WIDTH, end = CELL_END_PADDING)
             ) {
                 tasks.forEach { task ->
                     TimelineTaskCard(
@@ -319,17 +320,15 @@ fun TimelineTaskCard(
     var offsetYPx by remember { mutableFloatStateOf(0f) }
     var isMenuExpanded by remember { mutableStateOf(false) }
 
-    // Convert hour height from dp to actual screen pixels for density-accurate positioning
     val hourHeightPx = with(density) { HOUR_HEIGHT_DP.dp.toPx() }
-
-    // Calculate Y position in pixels based on start time (from 00:00 baseline)
     val startHourOffset = task.startTime.hour + (task.startTime.minute / 60f)
     val topPx = startHourOffset * hourHeightPx
-    val heightDp = ((task.durationMinutes / 60f) * HOUR_HEIGHT_DP).coerceAtLeast(54f)
+    val heightDp = ((task.durationMinutes / 60f) * HOUR_HEIGHT_DP - 6f).coerceAtLeast(54f)
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(vertical = 3.dp)
             .height(heightDp.dp)
             .offset { IntOffset(0, (topPx + offsetYPx).roundToInt()) }
             .pointerInput(task) {
@@ -339,12 +338,10 @@ fun TimelineTaskCard(
                         offsetYPx += dragAmount.y
                     },
                     onDragEnd = {
-                        // Calculate shifted time based on offset delta in pixels
                         val hourDelta = offsetYPx / hourHeightPx
                         val minutesDelta = (hourDelta * 60).roundToInt()
                         var newTime = task.startTime.plusMinutes(minutesDelta.toLong())
 
-                        // Clamp to valid hours 00:00 to 23:59
                         if (newTime.isBefore(LocalTime.of(0, 0))) {
                             newTime = LocalTime.of(0, 0)
                         }
@@ -360,8 +357,8 @@ fun TimelineTaskCard(
         colors = CardDefaults.cardColors(
             containerColor = task.category.color.copy(alpha = 0.22f)
         ),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = RoundedCornerShape(14.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
             modifier = Modifier
@@ -369,10 +366,9 @@ fun TimelineTaskCard(
                 .border(
                     width = 1.dp,
                     color = task.category.color.copy(alpha = 0.5f),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(14.dp)
                 )
         ) {
-            // Left color-coded vertical bar indicator
             Box(
                 modifier = Modifier
                     .width(6.dp)
@@ -383,11 +379,10 @@ fun TimelineTaskCard(
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Checkbox & Task details
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
@@ -448,7 +443,6 @@ fun TimelineTaskCard(
                     }
                 }
 
-                // Category Tag & Action Menu
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
