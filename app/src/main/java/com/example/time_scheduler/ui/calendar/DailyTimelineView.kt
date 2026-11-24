@@ -130,7 +130,7 @@ fun DailyTimelineView(
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = "Schedule Discrepancy Detected!",
+                                text = "Detected Discrepancy",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onErrorContainer

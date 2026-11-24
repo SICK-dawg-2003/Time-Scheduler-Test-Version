@@ -48,7 +48,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.time_scheduler.data.Category
@@ -96,25 +95,24 @@ fun CalendarHeader(
         Column(
             modifier = Modifier.padding(vertical = if (isLandscape) 6.dp else 10.dp)
         ) {
-            // 1. Month Navigation Row: [☰] [November 2026] [📅] [Indent] [Share] [Notifications] [Dark/Light Mode]
+            // 1. Month Navigation Row: [☰] [January 2027] [📅] [Indent] [Share] [Notifications] [Dark/Light Mode] ... [< >]
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
-                        start = 12.dp,
-                        end = if (isLandscape) 16.dp else 12.dp
+                        start = 10.dp,
+                        end = if (isLandscape) 16.dp else 10.dp
                     ),
                 horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Hamburger Menu Icon + Month Header + Today Jump Icon
+                // Hamburger Menu Icon + Month Header + Today Jump Icon (unweighted so full month text never truncates)
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f, fill = false)
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
                         onClick = onOpenDrawer,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(30.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Menu,
@@ -128,18 +126,16 @@ fun CalendarHeader(
 
                     Text(
                         text = selectedDate.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
-                        fontSize = if (isLandscape) 18.sp else 20.sp,
+                        fontSize = if (isLandscape) 18.sp else 19.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false,
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
                             .clickable { isMonthPickerOpen = true }
-                            .padding(end = 4.dp)
+                            .padding(end = 2.dp)
                     )
-
-                    Spacer(modifier = Modifier.width(4.dp))
 
                     IconButton(
                         onClick = { onDateSelected(LocalDate.now()) },
@@ -155,14 +151,14 @@ fun CalendarHeader(
                 }
 
                 // Adjust this width to change the indent beside the calendar icon
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(6.dp))
 
                 // Action Icons placed directly beside the Calendar Today icon (Portrait & Landscape)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    horizontalArrangement = Arrangement.spacedBy(0.dp)
                 ) {
-                    IconButton(onClick = onShareClick, modifier = Modifier.size(32.dp)) {
+                    IconButton(onClick = onShareClick, modifier = Modifier.size(30.dp)) {
                         Icon(
                             imageVector = Icons.Default.Share,
                             contentDescription = "Share Schedule",
@@ -170,7 +166,7 @@ fun CalendarHeader(
                             modifier = Modifier.size(18.dp)
                         )
                     }
-                    IconButton(onClick = onNotificationClick, modifier = Modifier.size(32.dp)) {
+                    IconButton(onClick = onNotificationClick, modifier = Modifier.size(30.dp)) {
                         Icon(
                             imageVector = Icons.Default.Notifications,
                             contentDescription = "Notifications",
@@ -178,7 +174,7 @@ fun CalendarHeader(
                             modifier = Modifier.size(18.dp)
                         )
                     }
-                    IconButton(onClick = onToggleDarkMode, modifier = Modifier.size(32.dp)) {
+                    IconButton(onClick = onToggleDarkMode, modifier = Modifier.size(30.dp)) {
                         Icon(
                             imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
                             contentDescription = "Toggle Dark Mode",
@@ -188,7 +184,7 @@ fun CalendarHeader(
                     }
                 }
 
-                // Month-mode navigation arrows pushed to the far right when in MONTH view
+                // Month-mode navigation arrows pushed to the far right using only leftover space
                 if (viewMode == CalendarViewMode.MONTH) {
                     Spacer(modifier = Modifier.weight(1f))
                     Row(verticalAlignment = Alignment.CenterVertically) {
