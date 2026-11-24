@@ -7,15 +7,27 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.max
 
 class ScheduleTextParser {
 
     private val headerNoise = setOf(
-        "time", "activity", "note", "notes", "daily schedule",
-        "schedule", "timetable", "hours", "subject", "room", "day", "date"
+        "time", "start", "end", "start time", "end time",
+        "activity", "task", "task title", "title",
+        "note", "notes", "description", "category",
+        "daily schedule", "schedule", "timetable", "hours", "subject", "room", "day", "date"
     )
 
-    // Requires at least one side of the range to have :MM or AM/PM so dates (11/24) or room numbers (3-4) are ignored
+    private val categoryColumnLabels = mapOf(
+        "work" to Category.WORK,
+        "study" to Category.STUDY,
+        "health" to Category.HEALTH,
+        "urgent" to Category.URGENT,
+        "personal" to Category.PERSONAL,
+        "other" to Category.OTHER
+    )
+
     private val strictTimeRangeRegex = Regex(
         """(?i)\b(\d{1,2}:\d{2}\s*(?:AM|PM)?|\d{1,2}\s*(?:AM|PM))\s*(?:[-–—~]|to|till|until)\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)\b"""
     )
@@ -24,8 +36,24 @@ class ScheduleTextParser {
         """(?i)\b(\d{1,2}:\d{2}\s*(?:AM|PM)?|\d{1,2}\s*(?:AM|PM))\b"""
     )
 
+    private data class SpatialBox(
+        val text: String,
+        val left: Int,
+        val top: Int,
+        val right: Int,
+        val bottom: Int
+    ) {
+        val centerY: Int get() = (top + bottom) / 2
+        val height: Int get() = max(1, bottom - top)
+    }
+
     /**
-     * Time-Anchor Row Span Spatial Parser with OCR confidence and symbol-noise filtering.
+     * Row-First Spatial Table & Schedule Parser.
+     * Groups ML Kit bounding boxes into horizontal visual rows so both:
+     *  - Single-column time ranges ("06:30 AM - 07:15 AM")
+     *  - Dual-column start/end times ("06:30 AM" | "07:15 AM")
+     *  - Multi-line wrapped titles and descriptions
+     * are extracted accurately regardless of image resolution.
      */
     fun parseVisionTextHierarchy(
         visionText: Text,
@@ -36,147 +64,238 @@ class ScheduleTextParser {
             return parseScannedText(visionText.text, targetDate)
         }
 
-        // 1. Filter out low-confidence OCR artifacts, symbol noise, and table headers
-        val validLines = allLines.filter { line ->
-            val text = line.text.trim()
-            val confidenceOk = (line.confidence ?: 1.0f) >= 0.65f
-            val alnumCount = text.count { it.isLetterOrDigit() }
-            val cleanWord = text.lowercase(Locale.ROOT).replace(Regex("""[^a-z\s]"""), "").trim()
+        // 1. Filter low-confidence noise, symbol-only lines, and table headers
+        val validBoxes = allLines.mapNotNull { line ->
+            val raw = line.text.trim()
+            val box = line.boundingBox ?: return@mapNotNull null
+            val confidenceOk = (line.confidence ?: 1.0f) >= 0.45f
+            val alnumCount = raw.count { it.isLetterOrDigit() }
+            val normalizedHeader = raw.lowercase(Locale.ROOT)
+                .replace(Regex("""[^a-z\s]"""), "")
+                .replace(Regex("""\s+"""), " ")
+                .trim()
 
-            confidenceOk &&
-                    text.length >= 2 &&
-                    alnumCount >= (text.length * 0.5) &&
-                    !headerNoise.contains(cleanWord)
+            if (confidenceOk &&
+                raw.length >= 2 &&
+                alnumCount >= (raw.length * 0.45) &&
+                !headerNoise.contains(normalizedHeader)
+            ) {
+                SpatialBox(raw, box.left, box.top, box.right, box.bottom)
+            } else {
+                null
+            }
         }
 
-        if (validLines.isEmpty()) return emptyList()
+        if (validBoxes.isEmpty()) return emptyList()
 
-        // 2. Find all verified time lines (Row Anchors)
-        class TimeAnchor(
-            val line: Text.Line,
-            val startStr: String,
-            val endStr: String,
-            val top: Int,
-            val bottom: Int
+        // 2. Cluster boxes into horizontal visual rows using median text height
+        val sortedHeights = validBoxes.map { it.height }.sorted()
+        val medianHeight = sortedHeights[sortedHeights.size / 2].coerceAtLeast(16)
+        val rowYTolerance = (medianHeight * 0.65).toInt().coerceAtLeast(12)
+
+        val sortedByY = validBoxes.sortedBy { it.centerY }
+        val visualRows = mutableListOf<MutableList<SpatialBox>>()
+
+        for (box in sortedByY) {
+            val matchingRow = visualRows.lastOrNull { row ->
+                val rowAvgY = row.map { it.centerY }.average()
+                abs(box.centerY - rowAvgY) <= rowYTolerance
+            }
+            if (matchingRow != null) {
+                matchingRow.add(box)
+            } else {
+                visualRows.add(mutableListOf(box))
+            }
+        }
+
+        // Sort boxes left-to-right within each row and merge closely adjacent fragments in the same cell
+        val mergedRows: List<List<SpatialBox>> = visualRows.map { row ->
+            val leftToRight = row.sortedBy { it.left }
+            val cells = mutableListOf<SpatialBox>()
+            for (box in leftToRight) {
+                val prev = cells.lastOrNull()
+                val gap = if (prev != null) box.left - prev.right else Int.MAX_VALUE
+                // Merge only if gap is smaller than ~1.1x line height (same table cell)
+                if (prev != null && gap < (medianHeight * 1.1).toInt()) {
+                    cells[cells.lastIndex] = SpatialBox(
+                        text = "${prev.text} ${box.text}",
+                        left = prev.left,
+                        top = minOf(prev.top, box.top),
+                        right = maxOf(prev.right, box.right),
+                        bottom = maxOf(prev.bottom, box.bottom)
+                    )
+                } else {
+                    cells.add(box)
+                }
+            }
+            cells
+        }
+
+        // 3. Parse each visual row into tasks (attaching wrapped continuation rows to the active task)
+        data class MutableTaskDraft(
+            var startTime: LocalTime,
+            var endTime: LocalTime,
+            var title: String,
+            var description: String,
+            var explicitCategory: Category?,
+            var titleLeftX: Int
         )
 
-        val timeAnchors = mutableListOf<TimeAnchor>()
-        for (line in validLines) {
-            val sanitizedText = sanitizeOcrTimeText(line.text)
-            val rangeMatch = strictTimeRangeRegex.find(sanitizedText)
-            if (rangeMatch != null) {
-                val box = line.boundingBox ?: continue
-                timeAnchors.add(
-                    TimeAnchor(
-                        line = line,
-                        startStr = rangeMatch.groupValues[1].trim(),
-                        endStr = rangeMatch.groupValues[2].trim(),
-                        top = box.top,
-                        bottom = box.bottom
-                    )
-                )
-            }
-        }
-
-        val sortedAnchors = timeAnchors.sortedBy { it.top }
-        if (sortedAnchors.isEmpty()) {
-            return parseScannedText(
-                validLines.joinToString("\n") { it.text },
-                targetDate
-            )
-        }
-
-        // 3. Assign non-time text lines to their vertical row spans in natural reading order
-        val parsedTasks = mutableListOf<TaskItem>()
+        val drafts = mutableListOf<MutableTaskDraft>()
         var lastTrackedTime: LocalTime? = null
 
-        val avgRowHeight = if (sortedAnchors.size > 1) {
-            ((sortedAnchors.last().top - sortedAnchors.first().top) / (sortedAnchors.size - 1))
-                .coerceAtLeast(40)
-        } else {
-            100
-        }
+        for (rowCells in mergedRows) {
+            var rowStartStr: String? = null
+            var rowEndStr: String? = null
+            val singleTimesInRow = mutableListOf<String>()
+            val textCells = mutableListOf<SpatialBox>()
 
-        val nonTimeLines = validLines.filterNot { line ->
-            sortedAnchors.any { it.line == line }
-        }
+            for (cell in rowCells) {
+                val sanitized = sanitizeOcrTimeText(cell.text)
+                val rangeMatch = strictTimeRangeRegex.find(sanitized)
 
-        for (idx in sortedAnchors.indices) {
-            val anchor = sortedAnchors[idx]
-            val rowTop = anchor.top - (avgRowHeight * 0.35).toInt()
-            val rowBottom = if (idx + 1 < sortedAnchors.size) {
-                sortedAnchors[idx + 1].top - 2
-            } else {
-                anchor.bottom + (avgRowHeight * 0.85).toInt()
-            }
+                if (rangeMatch != null && rowStartStr == null) {
+                    rowStartStr = rangeMatch.groupValues[1].trim()
+                    rowEndStr = rangeMatch.groupValues[2].trim()
 
-            // Sort top-to-bottom (bucketed by 20px line height), then left-to-right
-            val rowLines = nonTimeLines.filter { line ->
-                val box = line.boundingBox ?: return@filter false
-                val centerY = (box.top + box.bottom) / 2
-                centerY in rowTop..rowBottom
-            }.sortedWith(
-                compareBy(
-                    { (it.boundingBox?.top ?: 0) / 20 },
-                    { it.boundingBox?.left ?: 0 }
-                )
-            )
-
-            var taskTitle = ""
-            var description = "Imported from scanned schedule"
-
-            if (rowLines.isNotEmpty()) {
-                val minX = rowLines.minOf { it.boundingBox?.left ?: 0 }
-                val maxX = rowLines.maxOf { it.boundingBox?.right ?: 0 }
-                val columnSpan = maxX - minX
-
-                // Only split into Title vs. Notes columns if text spans wide horizontally (> 220px)
-                if (columnSpan > 220) {
-                    val midX = minX + (columnSpan * 0.55).toInt()
-                    val titleLines = rowLines.filter { (it.boundingBox?.left ?: 0) <= midX }
-                    val noteLines = rowLines.filter { (it.boundingBox?.left ?: 0) > midX }
-
-                    taskTitle = cleanExtractedText(titleLines.joinToString(" ") { it.text.trim() })
-                    if (noteLines.isNotEmpty()) {
-                        description = cleanExtractedText(noteLines.joinToString(" ") { it.text.trim() })
-                    } else if (titleLines.size > 1) {
-                        taskTitle = cleanExtractedText(titleLines[0].text)
-                        description = cleanExtractedText(titleLines.drop(1).joinToString(" ") { it.text.trim() })
+                    val leftover = cleanExtractedText(sanitized.removeRange(rangeMatch.range))
+                    if (leftover.length >= 2) {
+                        textCells.add(cell.copy(text = leftover))
                     }
                 } else {
-                    taskTitle = cleanExtractedText(rowLines[0].text)
-                    if (rowLines.size > 1) {
-                        description = cleanExtractedText(rowLines.drop(1).joinToString(" ") { it.text.trim() })
+                    val singleMatches = strictSingleTimeRegex.findAll(sanitized).toList()
+                    // Treat cell as a pure timestamp cell if the time token covers most of the cell text
+                    if (singleMatches.isNotEmpty() && sanitized.length <= 14) {
+                        singleMatches.forEach { singleTimesInRow.add(it.groupValues[1].trim()) }
+                    } else if (singleMatches.isNotEmpty() && textCells.isEmpty() && rowStartStr == null && singleTimesInRow.isEmpty()) {
+                        // Leading inline time + title in a single cell (e.g., "08:00 AM Team Sync")
+                        val firstMatch = singleMatches.first()
+                        singleTimesInRow.add(firstMatch.groupValues[1].trim())
+                        val leftover = cleanExtractedText(sanitized.removeRange(firstMatch.range))
+                        if (leftover.length >= 2) {
+                            textCells.add(cell.copy(text = leftover))
+                        }
+                    } else {
+                        val cleaned = cleanExtractedText(cell.text)
+                        if (cleaned.length >= 2) {
+                            textCells.add(cell.copy(text = cleaned))
+                        }
                     }
                 }
             }
 
-            val startTime = parseTimeWithChronology(anchor.startStr, lastTrackedTime) ?: continue
-            val endTime = parseTimeWithChronology(anchor.endStr, startTime) ?: startTime.plusHours(1)
-            lastTrackedTime = endTime
+            // Resolve Start & End time for this row if any timestamp was detected
+            val hasRowTimestamp = rowStartStr != null || singleTimesInRow.isNotEmpty()
 
-            // Skip empty placeholder rows if no readable title was captured
-            if (taskTitle.length < 2) continue
+            if (hasRowTimestamp) {
+                val resolvedStartStr = rowStartStr ?: singleTimesInRow[0]
+                val resolvedEndStr = rowEndStr ?: singleTimesInRow.getOrNull(1)
 
-            val combinedText = "$taskTitle$description"
-            parsedTasks.add(
-                TaskItem(
-                    title = taskTitle,
-                    description = description.ifBlank { "Imported from scanned schedule" },
-                    date = targetDate,
-                    startTime = startTime,
-                    endTime = endTime,
-                    category = detectCategory(combinedText)
-                )
-            )
+                val startTime = parseTimeWithChronology(resolvedStartStr, lastTrackedTime)
+                if (startTime != null) {
+                    val endTime = if (resolvedEndStr != null) {
+                        parseTimeWithChronology(resolvedEndStr, startTime) ?: startTime.plusHours(1)
+                    } else {
+                        startTime.plusHours(1)
+                    }
+                    lastTrackedTime = endTime
+
+                    // Check if the rightmost cell is an explicit Category column ("Work", "Study", etc.)
+                    var explicitCat: Category? = null
+                    val contentCells = textCells.toMutableList()
+                    if (contentCells.size >= 2) {
+                        val lastKey = contentCells.last().text.lowercase(Locale.ROOT)
+                        if (categoryColumnLabels.containsKey(lastKey)) {
+                            explicitCat = categoryColumnLabels[lastKey]
+                            contentCells.removeAt(contentCells.lastIndex)
+                        }
+                    }
+
+                    val titleCell = contentCells.firstOrNull()
+                    val title = titleCell?.text ?: ""
+                    val description = if (contentCells.size > 1) {
+                        contentCells.drop(1).joinToString(" ") { it.text }
+                    } else {
+                        ""
+                    }
+
+                    drafts.add(
+                        MutableTaskDraft(
+                            startTime = startTime,
+                            endTime = endTime,
+                            title = title,
+                            description = description,
+                            explicitCategory = explicitCat,
+                            titleLeftX = titleCell?.left ?: 0
+                        )
+                    )
+                }
+            } else if (drafts.isNotEmpty() && textCells.isNotEmpty()) {
+                // Continuation row (wrapped title or description lines directly below the previous task row)
+                val currentDraft = drafts.last()
+                val contentCells = textCells.toMutableList()
+
+                if (contentCells.size >= 2) {
+                    val lastKey = contentCells.last().text.lowercase(Locale.ROOT)
+                    if (categoryColumnLabels.containsKey(lastKey) && currentDraft.explicitCategory == null) {
+                        currentDraft.explicitCategory = categoryColumnLabels[lastKey]
+                        contentCells.removeAt(contentCells.lastIndex)
+                    }
+                }
+
+                if (currentDraft.title.isBlank()) {
+                    currentDraft.title = contentCells[0].text
+                    currentDraft.titleLeftX = contentCells[0].left
+                    if (contentCells.size > 1) {
+                        val extraDesc = contentCells.drop(1).joinToString(" ") { it.text }
+                        currentDraft.description = listOf(currentDraft.description, extraDesc)
+                            .filter { it.isNotBlank() }
+                            .joinToString(" ")
+                    }
+                } else if (contentCells.size >= 2) {
+                    currentDraft.title = "${currentDraft.title} ${contentCells[0].text}".trim()
+                    val extraDesc = contentCells.drop(1).joinToString(" ") { it.text }
+                    currentDraft.description = listOf(currentDraft.description, extraDesc)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" ")
+                } else {
+                    val cell = contentCells[0]
+                    // If aligned near the title column and description hasn't started, append to title; else description
+                    if (abs(cell.left - currentDraft.titleLeftX) <= medianHeight * 2 && currentDraft.description.isBlank()) {
+                        currentDraft.title = "${currentDraft.title} ${cell.text}".trim()
+                    } else {
+                        currentDraft.description = listOf(currentDraft.description, cell.text)
+                            .filter { it.isNotBlank() }
+                            .joinToString(" ")
+                    }
+                }
+            }
         }
 
-        return parsedTasks.sortedBy { it.startTime }
+        // If spatial row clustering found nothing (e.g., plain single-column text), fall back to line parser
+        if (drafts.isEmpty()) {
+            return parseScannedText(validBoxes.joinToString("\n") { it.text }, targetDate)
+        }
+
+        return drafts
+            .filter { it.title.length >= 2 }
+            .map { draft ->
+                val finalDesc = draft.description.ifBlank { "Imported from scanned schedule" }
+                val finalCategory = draft.explicitCategory ?: detectCategory("${draft.title} $finalDesc")
+                TaskItem(
+                    title = draft.title,
+                    description = finalDesc,
+                    date = targetDate,
+                    startTime = draft.startTime,
+                    endTime = draft.endTime,
+                    category = finalCategory
+                )
+            }
+            .sortedBy { it.startTime }
     }
 
     /**
-     * Parses raw OCR text lines when spatial bounding boxes are unavailable.
-     * Never fabricates tasks if no valid timestamps are found.
+     * Parses raw text lines (used by "Simulate Sample" and non-spatial fallback).
      */
     fun parseScannedText(rawText: String, targetDate: LocalDate = LocalDate.now()): List<TaskItem> {
         val lines = rawText.split("\n")
@@ -185,7 +304,7 @@ class ScheduleTextParser {
                 val alnumCount = line.count { it.isLetterOrDigit() }
                 val cleanWord = line.lowercase(Locale.ROOT).replace(Regex("""[^a-z\s]"""), "").trim()
                 line.length >= 2 &&
-                        alnumCount >= (line.length * 0.5) &&
+                        alnumCount >= (line.length * 0.45) &&
                         !headerNoise.contains(cleanWord)
             }
 
@@ -218,7 +337,7 @@ class ScheduleTextParser {
                                 date = targetDate,
                                 startTime = startTime,
                                 endTime = endTime,
-                                category = detectCategory("$taskTitle$description")
+                                category = detectCategory("$taskTitle $description")
                             )
                         )
                     }
@@ -259,7 +378,7 @@ class ScheduleTextParser {
                             date = targetDate,
                             startTime = startTime,
                             endTime = endTime,
-                            category = detectCategory("$title$description")
+                            category = detectCategory("$title $description")
                         )
                     )
                 }
@@ -305,13 +424,10 @@ class ScheduleTextParser {
             .trim()
     }
 
-    /**
-     * Targeted OCR Time Sanitizer that fixes common digit misreads without corrupting prose words.
-     */
     private fun sanitizeOcrTimeText(rawText: String): String {
         var text = rawText
 
-        // Fix digit misreads only within time-like patterns (e.g., "I0:00" -> "10:00", "7:OO" -> "7:00")
+        // Fix digit misreads only within time-like patterns
         text = text.replace(Regex("""\b[Il](\d:\d{2})"""), "1$1")
             .replace(Regex("""(\d{1,2}:)[Oo]{2}\b"""), "${1}00")
             .replace(Regex("""(\d{1,2}:)[Oo](\d)\b"""), "${1}0$2")
