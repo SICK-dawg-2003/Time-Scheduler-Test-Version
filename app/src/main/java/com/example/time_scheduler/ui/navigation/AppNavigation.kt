@@ -98,6 +98,14 @@ fun MainAppNavigation(
     var currentDestination by rememberSaveable { mutableStateOf(initialDestination) }
     var currentViewMode by rememberSaveable { mutableStateOf(initialViewMode) }
 
+    // Google Account & Sync Profile State
+    var accountsList by remember { mutableStateOf(AccountPrefsManager.loadAccounts(context)) }
+    var activeAccount by remember {
+        mutableStateOf(AccountPrefsManager.getActiveAccount(context, accountsList))
+    }
+    var lastSyncLabel by remember { mutableStateOf(AccountPrefsManager.getLastSyncTime(context)) }
+    var isAccountSwitcherOpen by remember { mutableStateOf(false) }
+
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
     val drawerScrollState = rememberScrollState()
@@ -122,183 +130,204 @@ fun MainAppNavigation(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(16.dp)
-                        .verticalScroll(drawerScrollState)
                 ) {
-                    Text(
-                        text = "UniSync Schedule",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 12.dp)
-                    )
-
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.padding(vertical = 6.dp)
-                    )
-
-                    // 1. Navigation Destinations (Calendar & Scanner)
-                    Text(
-                        text = "MAIN NAVIGATION",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
-                    )
-
-                    AppDestination.entries.forEach { dest ->
-                        val isSelected = currentDestination == dest
-                        NavigationDrawerItem(
-                            label = {
-                                Text(
-                                    text = dest.title,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    fontSize = 14.sp
-                                )
-                            },
-                            icon = {
-                                Icon(
-                                    imageVector = dest.icon,
-                                    contentDescription = dest.title,
-                                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            },
-                            selected = isSelected,
-                            onClick = {
-                                currentDestination = dest
-                                navPrefs.edit { putString("last_destination", dest.name) }
-                                coroutineScope.launch { drawerState.close() }
-                            },
-                            colors = NavigationDrawerItemDefaults.colors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.padding(vertical = 3.dp)
-                        )
-                    }
-
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-
-                    // 2. Calendar View Modes (Agenda, Day, Week, Month)
-                    Text(
-                        text = "CALENDAR VIEWS",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
-                    )
-
-                    sidepanelItems.forEach { (mode, label, icon) ->
-                        val isSelected = currentDestination == AppDestination.CALENDAR && currentViewMode == mode
-                        NavigationDrawerItem(
-                            label = {
-                                Text(
-                                    text = label,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    fontSize = 14.sp
-                                )
-                            },
-                            icon = {
-                                Icon(
-                                    imageVector = icon,
-                                    contentDescription = label,
-                                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            },
-                            selected = isSelected,
-                            onClick = {
-                                currentDestination = AppDestination.CALENDAR
-                                currentViewMode = mode
-                                navPrefs.edit {
-                                    putString("last_destination", AppDestination.CALENDAR.name)
-                                    putString("last_view_mode", mode.name)
-                                }
-                                coroutineScope.launch { drawerState.close() }
-                            },
-                            colors = NavigationDrawerItemDefaults.colors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.padding(vertical = 3.dp)
-                        )
-                    }
-
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-
-                    // 3. Theme Color Swatch Selector
-                    Text(
-                        text = "THEME COLORS",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 8.dp)
-                    )
-
-                    Row(
+                    // Scrollable Top & Middle Sections
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .weight(1f)
+                            .verticalScroll(drawerScrollState)
                     ) {
-                        AppThemeColor.entries.forEach { themeOption ->
-                            val isSelected = selectedThemeColor == themeOption
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { onThemeColorSelected(themeOption) }
-                                    .padding(4.dp)
-                            ) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .clip(CircleShape)
-                                        .background(themeOption.swatchColor)
-                                        .then(
-                                            if (isSelected) {
-                                                Modifier.border(
-                                                    width = 2.dp,
-                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                    shape = CircleShape
-                                                )
-                                            } else {
-                                                Modifier
-                                            }
-                                        )
-                                ) {
-                                    if (isSelected) {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = "${themeOption.label} selected",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(16.dp)
-                                        )
+                        Text(
+                            text = "UniSync Schedule",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 12.dp)
+                        )
+
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(vertical = 6.dp)
+                        )
+
+                        // 1. Navigation Destinations (Calendar & Scanner)
+                        Text(
+                            text = "MAIN NAVIGATION",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
+                        )
+
+                        AppDestination.entries.forEach { dest ->
+                            val isSelected = currentDestination == dest
+                            NavigationDrawerItem(
+                                label = {
+                                    Text(
+                                        text = dest.title,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        fontSize = 14.sp
+                                    )
+                                },
+                                icon = {
+                                    Icon(
+                                        imageVector = dest.icon,
+                                        contentDescription = dest.title,
+                                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                selected = isSelected,
+                                onClick = {
+                                    currentDestination = dest
+                                    navPrefs.edit { putString("last_destination", dest.name) }
+                                    coroutineScope.launch { drawerState.close() }
+                                },
+                                colors = NavigationDrawerItemDefaults.colors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                    selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.padding(vertical = 3.dp)
+                            )
+                        }
+
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+
+                        // 2. Calendar View Modes (Agenda, Day, Week, Month)
+                        Text(
+                            text = "CALENDAR VIEWS",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
+                        )
+
+                        sidepanelItems.forEach { (mode, label, icon) ->
+                            val isSelected = currentDestination == AppDestination.CALENDAR && currentViewMode == mode
+                            NavigationDrawerItem(
+                                label = {
+                                    Text(
+                                        text = label,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        fontSize = 14.sp
+                                    )
+                                },
+                                icon = {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = label,
+                                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                selected = isSelected,
+                                onClick = {
+                                    currentDestination = AppDestination.CALENDAR
+                                    currentViewMode = mode
+                                    navPrefs.edit {
+                                        putString("last_destination", AppDestination.CALENDAR.name)
+                                        putString("last_view_mode", mode.name)
                                     }
+                                    coroutineScope.launch { drawerState.close() }
+                                },
+                                colors = NavigationDrawerItemDefaults.colors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                    selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.padding(vertical = 3.dp)
+                            )
+                        }
+
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+
+                        // 3. Theme Color Swatch Selector
+                        Text(
+                            text = "THEME COLORS",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 8.dp)
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AppThemeColor.entries.forEach { themeOption ->
+                                val isSelected = selectedThemeColor == themeOption
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { onThemeColorSelected(themeOption) }
+                                        .padding(4.dp)
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(CircleShape)
+                                            .background(themeOption.swatchColor)
+                                            .then(
+                                                if (isSelected) {
+                                                    Modifier.border(
+                                                        width = 2.dp,
+                                                        color = MaterialTheme.colorScheme.onSurface,
+                                                        shape = CircleShape
+                                                    )
+                                                } else {
+                                                    Modifier
+                                                }
+                                            )
+                                    ) {
+                                        if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = "${themeOption.label} selected",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    Text(
+                                        text = themeOption.label,
+                                        fontSize = 10.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                Text(
-                                    text = themeOption.label,
-                                    fontSize = 10.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
                             }
                         }
                     }
+
+                    // 4. Bottom Pinned Google Account Profile Footer
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+
+                    DrawerProfileFooter(
+                        activeAccount = activeAccount,
+                        lastSyncLabel = lastSyncLabel,
+                        onClick = {
+                            accountsList = AccountPrefsManager.loadAccounts(context)
+                            isAccountSwitcherOpen = true
+                        }
+                    )
                 }
             }
         }
@@ -330,5 +359,28 @@ fun MainAppNavigation(
                 }
             }
         }
+    }
+
+    if (isAccountSwitcherOpen) {
+        AccountSwitcherDialog(
+            accounts = accountsList,
+            activeAccount = activeAccount,
+            onDismiss = { isAccountSwitcherOpen = false },
+            onSelectAccount = { chosen ->
+                AccountPrefsManager.setActiveAccount(context, chosen.email)
+                activeAccount = chosen
+                lastSyncLabel = AccountPrefsManager.getLastSyncTime(context)
+            },
+            onAddAccount = { name, email ->
+                val updatedList = AccountPrefsManager.addLocalAccount(context, name, email)
+                accountsList = updatedList
+                activeAccount = AccountPrefsManager.getActiveAccount(context, updatedList)
+                lastSyncLabel = AccountPrefsManager.getLastSyncTime(context)
+            },
+            onSyncNow = {
+                AccountPrefsManager.setActiveAccount(context, activeAccount.email)
+                lastSyncLabel = AccountPrefsManager.getLastSyncTime(context)
+            }
+        )
     }
 }
