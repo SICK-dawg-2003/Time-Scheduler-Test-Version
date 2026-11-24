@@ -94,7 +94,9 @@ fun CalendarHeader(
         Column(
             modifier = Modifier.padding(vertical = if (isLandscape) 6.dp else 10.dp)
         ) {
-            // 1. Top Navigation Row
+            // 1. Top Navigation Row:
+            // Left: [☰] [Month Year] [📅] (with [< >] flanking Month Year in Month view)
+            // Right: [Share] [Notifications] [Dark/Light Mode]
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -102,7 +104,6 @@ fun CalendarHeader(
                         start = 10.dp,
                         end = if (isLandscape) 16.dp else 10.dp
                     ),
-                horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
@@ -121,7 +122,6 @@ fun CalendarHeader(
                     }
 
                     if (viewMode == CalendarViewMode.MONTH) {
-                        // Month View: [<] >> [Month Year] >> [>] >> [📅]
                         IconButton(
                             onClick = { onDateSelected(selectedDate.minusMonths(1)) },
                             modifier = Modifier.size(28.dp)
@@ -159,7 +159,6 @@ fun CalendarHeader(
                             )
                         }
                     } else {
-                        // Other Views: [Month Year] >> [📅]
                         Spacer(modifier = Modifier.width(4.dp))
 
                         Text(
@@ -189,11 +188,12 @@ fun CalendarHeader(
                     }
                 }
 
-                Spacer(modifier = Modifier.width(6.dp))
+                // Pushes Share, Notification, and Theme buttons to the right side across Agenda, Week, and Month views
+                Spacer(modifier = Modifier.weight(1f))
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(0.dp)
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     IconButton(onClick = onShareClick, modifier = Modifier.size(30.dp)) {
                         Icon(
